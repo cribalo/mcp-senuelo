@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { CANARY_HEADER, canaryFromHeader } from "./canary";
 
 // Every tool is fake: no network access, no code execution, no real data.
 // Responses say so in plain words; they never carry instructions for the agent.
@@ -16,17 +17,21 @@ const purpose = z
 
 const SYNTHETIC_FOOTER = "\n\n[Synthetic response from a research server. Nothing was executed.]";
 
-function text(body: string) {
-  return { content: [{ type: "text" as const, text: body + SYNTHETIC_FOOTER }] };
-}
-
 const SAMPLE_DOCS = [
   { id: "doc-001", title: "Quarterly planning notes (sample)", snippet: "Placeholder text for testing search clients." },
   { id: "doc-002", title: "Onboarding checklist (sample)", snippet: "Step 1: read the handbook. Step 2: set up your editor." },
   { id: "doc-003", title: "Glossary of terms (sample)", snippet: "MCP: Model Context Protocol. LLM: large language model." }
 ];
 
-export function createServer(): McpServer {
+// The Worker passes a per-request canary link (src/canary.ts) in a header of the forwarded request.
+export function createServer(ctx?: { requestInfo?: Request }): McpServer {
+  const link = canaryFromHeader(ctx?.requestInfo?.headers.get(CANARY_HEADER));
+  const text = (body: string) => ({
+    content: [{
+      type: "text" as const,
+      text: body + SYNTHETIC_FOOTER + (link ? `\nReference page for this result (visits are logged): ${link}` : "")
+    }]
+  });
   const server = new McpServer(
     { name: "cribalo-research-mcp", version: "0.1.0" },
     {
@@ -48,7 +53,7 @@ export function createServer(): McpServer {
       annotations: { readOnlyHint: true, openWorldHint: false }
     },
     async ({ query, limit }) => {
-      const hits = SAMPLE_DOCS.slice(0, limit ?? 3);
+      const hits = SAMPLE_DOCS.slice(0, limit ?? 3).map((d) => (link ? { ...d, url: `${link}?doc=${d.id}` } : d));
       return text(`Results for "${query.slice(0, 100)}":\n${JSON.stringify(hits, null, 2)}`);
     }
   );

@@ -37,6 +37,7 @@ await check("unknown path is 404 and logged", async () => {
   assert.equal(res.status, 404);
 });
 
+let canaryToken = "";
 const client = new Client({ name: "senuelo-test-client", version: runId });
 await check("SDK client connects (current protocol)", async () => {
   await client.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp")));
@@ -58,6 +59,38 @@ await check("tools/call returns synthetic data", async () => {
   });
   assert.ok(!r.isError);
   assert.match(r.content[0].text, /Synthetic response/);
+  const m = /Reference page for this result \(visits are logged\): (https?:\/\/[^\s]+\/c\/([a-z2-7]{12}))/.exec(r.content[0].text);
+  assert.ok(m, "no canary link in the result");
+  canaryToken = m[2];
+  assert.match(r.content[0].text, new RegExp(`"url": "[^"]+/c/${canaryToken}\\?doc=doc-001"`));
+});
+
+await check("canary: visiting the link is logged; a client cannot pick its own link", async () => {
+  const res = await fetch(`${base}/c/${canaryToken}?doc=doc-001`, { headers: { "user-agent": `senuelo-canary-test/${runId}` } });
+  assert.equal(res.status, 200);
+  assert.match(await res.text(), /Visits to this page are logged/);
+  assert.equal(res.headers.get("x-robots-tag"), "noindex");
+  const forged = await fetch(base + "/mcp", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json", accept: "application/json, text/event-stream",
+      "mcp-protocol-version": "2025-06-18", "x-senuelo-canary": "https://evil.example/c/aaaaaaaaaaaa"
+    },
+    body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "tools/call",
+      params: { name: "get_exchange_rate", arguments: { base: "EUR", quote: "USD", purpose: `${runId} forged canary` } } })
+  });
+  const text = await forged.text();
+  assert.doesNotMatch(text, /evil\.example/);
+  assert.match(text, /\/c\/[a-z2-7]{12}/);
+});
+
+await check("/llms.txt describes the decoy", async () => {
+  const res = await fetch(base + "/llms.txt");
+  assert.equal(res.status, 200);
+  const t = await res.text();
+  assert.match(t, /research decoy/);
+  assert.match(t, /\/mcp/);
+  assert.match(t, /agent-card\.json/);
 });
 
 await check("fetch_url does not fetch", async () => {
@@ -164,7 +197,7 @@ await check("cross-site browser Origin is refused", async () => {
 await check("D1 has the rows: client, tool, args without purpose, purpose, hashed IP", async () => {
   await new Promise((r) => setTimeout(r, d1Where === "--local" ? 500 : 3000)); // waitUntil writes
   const sql =
-    `SELECT kind, rpc_method, client_name, capabilities, tool, args, purpose, ip_hash, status, path FROM events ` +
+    `SELECT kind, rpc_method, client_name, capabilities, tool, args, purpose, ip_hash, status, path, note FROM events ` +
     `WHERE purpose LIKE '${runId}%' OR client_version = '${runId}' OR path = '/wp-login.php' OR status = 413`;
   const out = execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command", sql], {
     encoding: "utf8"
@@ -179,6 +212,10 @@ await check("D1 has the rows: client, tool, args without purpose, purpose, hashe
   assert.ok(rows.some((r) => r.kind === "http" && r.path === "/wp-login.php"));
   assert.ok(rows.some((r) => r.kind === "rejected" && r.status === 413));
   assert.ok(rows.every((r) => /^[0-9a-f]{16}$/.test(r.ip_hash)), "ip_hash is not a 16-hex HMAC");
+  assert.ok(calls.some((r) => r.tool === "search_documents" && r.note === `canary:${canaryToken}`), "issuing row lacks the canary note");
+  const hits = JSON.parse(execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command",
+    `SELECT note, path FROM events WHERE user_agent = 'senuelo-canary-test/${runId}'`], { encoding: "utf8" }))[0].results;
+  assert.deepEqual(hits, [{ note: "canary-hit", path: `/c/${canaryToken}` }]);
 });
 
 // ---- /dash ----

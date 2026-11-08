@@ -32,11 +32,12 @@ Responde siempre con un texto sintético que lo dice y no ejecuta nada.</p>
   <li>User-Agent, versión del protocolo y la información del cliente que este envía (<code>clientInfo</code>).</li>
   <li>Métodos MCP, herramienta llamada, sus argumentos (recortados) y el campo <code>purpose</code>.</li>
   <li>En A2A: método, versión del protocolo, el texto de cada mensaje (recortado), el <em>skill</em> pedido y los identificadores de conversación y tarea.</li>
+  <li>Cada resultado sintético lleva un enlace de referencia propio (<code>/c/…</code>); si alguien lo visita, se registra la visita, para saber si los agentes usan los resultados.</li>
   <li>También las peticiones a cualquier otra ruta de este dominio (método, ruta sin parámetros, User-Agent).</li>
 </ul>
 <p>Los registros se borran a los ${retentionDays} días. No se usan para identificar a nadie. Antes de guardarse,
 se ocultan los secretos y datos personales evidentes (claves de API y tokens, correos electrónicos, nombres de
-usuario en rutas de archivos, números de tarjeta e IBAN), que se sustituyen por <code>[REDACTED:…]</code>.
+usuario en rutas de archivos, números de tarjeta, IBAN, DNI/NIE y teléfonos), que se sustituyen por <code>[REDACTED:…]</code>.
 Los resultados agregados pueden publicarse en informes, también en informes que se ofrezcan comercialmente;
 los registros individuales nunca se ceden ni se venden. Cada herramienta pide un campo <code>purpose</code>:
 rellenarlo es voluntario en el sentido de que su contenido lo decide quien llama; agradecemos que sea sincero.</p>
@@ -55,9 +56,10 @@ ${contactLine}
 <code>/a2a</code> (card at <code>/.well-known/agent-card.json</code>) are fake and harmless: nothing is executed, no outbound requests are made and no real data exists. Every call is
 logged (time, Cloudflare country and ASN, salted hash of the IP, User-Agent, clientInfo, methods, tool,
 truncated arguments and the <code>purpose</code> field; for A2A, the method, protocol version, truncated message text, requested skill and context/task ids) and kept for ${retentionDays} days, to study which MCP clients
-and agents connect to open servers and why. Requests to any other path are logged too.
+and agents connect to open servers and why. Each synthetic result carries its own reference link (<code>/c/…</code>);
+visits to it are logged, to see whether agents act on results. Requests to any other path are logged too.
 Obvious secrets and personal data (API keys and tokens, email addresses, user names in file paths, card numbers,
-IBANs) are replaced by <code>[REDACTED:…]</code> before anything is stored. Aggregated results may be published
+IBANs, Spanish ID numbers, phone numbers) are replaced by <code>[REDACTED:…]</code> before anything is stored. Aggregated results may be published
 in reports, including reports offered commercially; individual records are never shared or sold.</p>
 </body>
 </html>`;

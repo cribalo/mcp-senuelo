@@ -28,6 +28,15 @@ function ibanOk(s: string): boolean {
   return rem === 1;
 }
 
+// Spanish DNI (8 digits + letter) and NIE (X/Y/Z + 7 digits + letter), with the check letter.
+function dniOk(m: string): boolean {
+  const s = m.replace(/[- ]/g, "").toUpperCase();
+  const num = s.slice(0, -1).replace(/^X/, "0").replace(/^Y/, "1").replace(/^Z/, "2");
+  return "TRWAGMYFPDXBNJZSQVHLCKE"[Number(num) % 23] === s.slice(-1);
+}
+
+const digitCount = (m: string) => m.replace(/\D/g, "").length;
+
 type Rule = { kind: string; re: RegExp; valid?: (m: string) => boolean; group?: boolean };
 
 const RULES: Rule[] = [
@@ -63,6 +72,19 @@ const RULES: Rule[] = [
   {
     kind: "email",
     re: /[A-Za-z0-9._%+-]{1,64}@(?:[A-Za-z0-9-]{1,63}\.){1,8}[A-Za-z]{2,24}/g
+  },
+  { kind: "dni", re: /(?<![A-Za-z0-9])(?:[XYZxyz]\d{7}|\d{8})[- ]?[A-Za-z](?![A-Za-z0-9])/g, valid: dniOk },
+  // International numbers need a + or 00 prefix; Spanish ones need separators, since 9 bare
+  // digits are as often an id as a phone. Dots are not separators (IPv4 addresses, versions).
+  {
+    kind: "phone",
+    re: /(?<![\w+.])(?:\+|00)[1-9]\d{0,2}(?:[ -]?\(?\d{1,4}\)?){2,5}(?![\w.])/g,
+    valid: (m) => digitCount(m) >= 9 && digitCount(m) <= 15
+  },
+  {
+    kind: "phone",
+    re: /(?<![\w.+-])[6789]\d{1,2}(?:[ -]\d{2,3}){2,4}(?![\w.-])/g,
+    valid: (m) => digitCount(m) === 9
   },
   // Only the user name is hidden; the rest of the path is kept. The lookbehind avoids URLs like example.com/home/x.
   {

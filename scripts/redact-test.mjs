@@ -62,6 +62,25 @@ hides("iban", "GB82 WEST 1234 5698 7654 32");
 hides("iban", "DE89370400440532013000");
 keeps("ES9121000418450200051333"); // bad checksum
 keeps("HELLO12WORLD3456");
+// dni / nie (check letter)
+hides("dni", "mi DNI es 12345678Z, gracias", "mi DNI es [REDACTED:dni], gracias");
+hides("dni", "NIE X1234567L y DNI 12345678-z");
+keeps("pedido 12345678A");
+keeps("ref X1234567A");
+keeps("hash ab12345678Zq");
+// phone
+hides("phone", "llámame al +34 612 345 678 hoy", "llámame al [REDACTED:phone] hoy");
+hides("phone", "tel:+34612345678");
+hides("phone", "call 0044 20 7946 0958");
+hides("phone", "(+1 415-555-0132)");
+hides("phone", "fijo 91 123 45 67 o móvil 612-345-678");
+keeps("server at 80.58.61.250 port 8080");
+keeps("version 9.12.3 and v612.345.678");
+keeps("id 612345678");
+keeps("2026-11-08T17:22:47Z");
+keeps("total 600 000 eur");
+keeps("UTC+01:00 and +100 points");
+
 // kinds list: distinct and sorted
 {
   const r = redact("a@b.com c@d.org /Users/zed/x sk-abcdefghijklmnop1234");

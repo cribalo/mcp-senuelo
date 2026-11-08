@@ -62,7 +62,7 @@ await check("old /.well-known/agent.json path also serves the card", async () =>
   assert.equal((await res.json()).name, "Cribalo research agent");
 });
 
-let v1ContextId;
+let v1ContextId, v1Task;
 await check("SDK 1.3 (A2A 1.0): SendMessage returns a completed synthetic task", async () => {
   const client = await v1Factory().createFromUrl(base);
   const result = await client.sendMessage({
@@ -77,13 +77,30 @@ await check("SDK 1.3 (A2A 1.0): SendMessage returns a completed synthetic task",
   const text = result.artifacts[0].parts[0].content;
   assert.equal(text.$case, "text");
   assert.match(text.value, /Synthetic response from a research agent/);
+  assert.match(text.value, /Reference page for this result \(visits are logged\): \S+\/c\/[a-z2-7]{12}/);
   v1ContextId = result.contextId;
   assert.ok(v1ContextId);
+  v1Task = result;
 });
 
-await check("SDK 1.3: GetTask misses (stateless) with TaskNotFound", async () => {
+await check("SDK 1.3: GetTask returns the same completed task; unknown or tampered ids miss", async () => {
   const client = await v1Factory().createFromUrl(base);
+  const again = await client.getTask({ id: v1Task.id, historyLength: 0 });
+  assert.equal(again.id, v1Task.id);
+  assert.equal(again.contextId, v1ContextId);
+  assert.equal(again.status.state, 3);
+  assert.equal(again.artifacts[0].parts[0].content.value, v1Task.artifacts[0].parts[0].content.value);
   await assert.rejects(client.getTask({ id: "does-not-exist", historyLength: 0 }), /not found|-32001/i);
+  const [t, payload, sig] = v1Task.id.split(".");
+  const forged = `${t}.${payload.slice(0, -2)}AA.${sig}`;
+  await assert.rejects(client.getTask({ id: forged, historyLength: 0 }), /not found|-32001/i);
+});
+
+await check("CancelTask on a completed task is -32002; SubscribeToTask -32004", async () => {
+  const c = await (await rpc({ jsonrpc: "2.0", id: 11, method: "CancelTask", params: { id: v1Task.id } }, { "a2a-version": "1.0" })).json();
+  assert.equal(c.error.code, -32002);
+  const s = await (await rpc({ jsonrpc: "2.0", id: 12, method: "SubscribeToTask", params: { id: v1Task.id } }, { "a2a-version": "1.0" })).json();
+  assert.equal(s.error.code, -32004);
 });
 
 await check("SDK 0.3.14 (A2A 0.3): message/send returns a completed task", async () => {
@@ -100,6 +117,10 @@ await check("SDK 0.3.14 (A2A 0.3): message/send returns a completed task", async
   assert.equal(res.result.contextId, `${runId}-ctx`);
   assert.equal(res.result.artifacts[0].parts[0].kind, "text");
   assert.match(res.result.artifacts[0].parts[0].text, /Nothing was executed/);
+  const got = await client.getTask({ id: res.result.id });
+  assert.ok(!("error" in got), JSON.stringify(got));
+  assert.equal(got.result.status.state, "completed");
+  assert.equal(got.result.contextId, `${runId}-ctx`);
 });
 
 await check("streaming is unsupported (-32004), unknown method -32601", async () => {
@@ -121,8 +142,11 @@ await check("bad params -32602, invalid JSON -32700", async () => {
   assert.equal(j.error.code, -32700);
 });
 
-await check("GET /a2a is 405; text/plain POST is 415 (no CORS-simple requests)", async () => {
-  assert.equal((await fetch(base + "/a2a")).status, 405);
+await check("GET /a2a is 200 info pointing to the card; PUT 405; text/plain POST is 415 (no CORS)", async () => {
+  const g = await fetch(base + "/a2a");
+  assert.equal(g.status, 200);
+  assert.match((await g.json()).agentCard, /\/\.well-known\/agent-card\.json$/);
+  assert.equal((await fetch(base + "/a2a", { method: "PUT", body: "{}" })).status, 405);
   const r = await fetch(base + "/a2a", { method: "POST", headers: { "content-type": "text/plain" }, body: "{}" });
   assert.equal(r.status, 415);
   const pre = await fetch(base + "/a2a", { method: "OPTIONS", headers: { origin: "https://evil.example", "access-control-request-method": "POST" } });
@@ -131,7 +155,7 @@ await check("GET /a2a is 405; text/plain POST is 415 (no CORS-simple requests)",
 
 await check("D1: a2a rows hold method, version, text as purpose, skill, context; secrets redacted", async () => {
   await new Promise((r) => setTimeout(r, 1500)); // writes run in waitUntil
-  const sql = `SELECT rpc_method, protocol_version, tool, purpose, context_id, redactions, args FROM events
+  const sql = `SELECT rpc_method, protocol_version, tool, purpose, context_id, redactions, args, note FROM events
     WHERE kind = 'a2a' AND purpose LIKE '${runId}%' ORDER BY id`;
   const out = execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command", sql],
     { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
@@ -146,6 +170,7 @@ await check("D1: a2a rows hold method, version, text as purpose, skill, context;
   assert.equal(v03.context_id, `${runId}-ctx`);
   assert.doesNotMatch(v03.purpose, /sk-ant-api03|alice/);
   assert.match(v03.purpose, /REDACTED/);
+  assert.match(v1.note, /^canary:[a-z2-7]{12}$/);
   assert.ok(v03.redactions, "redactions column empty");
   const cards = JSON.parse(execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command",
     "SELECT count(*) AS n FROM events WHERE kind = 'a2a' AND note = 'agent-card'"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }))[0].results[0].n;

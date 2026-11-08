@@ -1,7 +1,10 @@
 // Decoy A2A (Agent2Agent) agent: a public Agent Card and a stateless JSON-RPC endpoint.
 // Like the MCP tools, nothing is executed: every SendMessage gets a completed task with a
 // fixed synthetic text that says so. Speaks A2A 1.0 and, for older clients, 0.3.
+// Nothing is stored either: the task id is a signed token holding the context id, issue time and
+// canary token, so GetTask can rebuild the same completed task later.
 import { Row, asString, truncate, truncateOrNull, cleanOrNull, joinKinds, makeCleaner } from "./log";
+import { canaryUrl } from "./canary";
 
 export const A2A_PATH = "/a2a";
 // 1.0 path, plus the pre-0.3 path some crawlers still request.
@@ -14,6 +17,10 @@ const NOTICE =
 const REPLY =
   "Synthetic response from a research agent. Nothing was executed, nothing was fetched and " +
   "no real data exists behind this agent. Your request was logged for research; details at https://mcp.cribalo.com/";
+const replyText = (link: string | null) => (link ? `${REPLY} Reference page for this result (visits are logged): ${link}` : REPLY);
+
+// Signed task ids stay valid this long; after that GetTask misses like any unknown id.
+const TASK_TTL_MS = 7 * 24 * 3600 * 1000;
 
 // Mirrors the MCP tools (src/tools.ts) so both doors offer the same bait.
 const SKILLS = [
@@ -61,8 +68,10 @@ const ERR = {
   invalidRequest: { code: -32600, message: "Invalid request" },
   methodNotFound: { code: -32601, message: "Method not found" },
   invalidParams: { code: -32602, message: "Invalid params" },
-  // Stateless: no task is ever stored, so every lookup misses.
+  // Unknown, tampered or expired task id.
   taskNotFound: { code: -32001, message: "Task not found" },
+  // Every task is born completed.
+  taskNotCancelable: { code: -32002, message: "Task cannot be canceled: it is already completed" },
   pushNotSupported: { code: -32003, message: "Push notifications are not supported" },
   unsupported: { code: -32004, message: "This operation is not supported" },
   extendedCard: { code: -32007, message: "Extended agent card is not configured" },
@@ -71,7 +80,9 @@ const ERR = {
 
 const SEND = new Set(["SendMessage", "message/send"]);
 const STREAM = new Set(["SendStreamingMessage", "message/stream"]);
-const TASK_LOOKUP = new Set(["GetTask", "tasks/get", "CancelTask", "tasks/cancel", "SubscribeToTask", "tasks/resubscribe"]);
+const GET_TASK = new Set(["GetTask", "tasks/get"]);
+const CANCEL_TASK = new Set(["CancelTask", "tasks/cancel"]);
+const SUBSCRIBE_TASK = new Set(["SubscribeToTask", "tasks/resubscribe"]);
 const LIST = new Set(["ListTasks", "tasks/list"]);
 const EXTENDED = new Set(["GetExtendedAgentCard", "agent/getAuthenticatedExtendedCard"]);
 
@@ -84,12 +95,39 @@ function parseVersion(raw: string | null): Version | null {
   return v === "1.0" || v === "0.3" ? v : null;
 }
 
-export function handleA2a(
-  request: Request, url: URL, body: string, base: Row, maxField: number
-): { response: Response; rows: Row[] } {
+export type A2aContext = {
+  origin: string; // public origin used in links (https://mcp.cribalo.com in production)
+  canary: string; // canary token for a result issued by this request
+  taskKey: CryptoKey | null; // signs task ids; null (no IP_SALT) means every lookup misses
+};
+
+export async function taskKey(salt: string | undefined): Promise<CryptoKey | null> {
+  if (!salt) return null;
+  const enc = new TextEncoder();
+  const root = await crypto.subtle.importKey("raw", enc.encode(salt), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const raw = await crypto.subtle.sign("HMAC", root, enc.encode("a2a-task-id-v1"));
+  return crypto.subtle.importKey("raw", raw, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+}
+
+export async function handleA2a(
+  request: Request, url: URL, body: string, base: Row, maxField: number, ctx: A2aContext
+): Promise<{ response: Response; rows: Row[] }> {
   const row: Row = { ...base, kind: "a2a" };
+  if (request.method === "GET" || request.method === "HEAD") {
+    // Liveness checks and humans: say what this is instead of a bare 405.
+    const info = {
+      name: "Cribalo research agent (A2A endpoint)",
+      message: "A2A JSON-RPC 2.0 endpoint of a research decoy. Send POST requests; nothing is executed and requests are logged.",
+      agentCard: `${ctx.origin}/.well-known/agent-card.json`,
+      protocolVersions: ["1.0", "0.3"],
+      documentation: `${ctx.origin}/`
+    };
+    const headers = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
+    const response = new Response(request.method === "HEAD" ? null : JSON.stringify(info, null, 2), { headers });
+    return { response, rows: [{ ...row, status: 200, note: "endpoint info" }] };
+  }
   if (request.method !== "POST") {
-    return { response: new Response("Use POST with JSON-RPC 2.0\n", { status: 405, headers: { allow: "POST" } }), rows: [{ ...row, status: 405 }] };
+    return { response: new Response("Use POST with JSON-RPC 2.0\n", { status: 405, headers: { allow: "GET, HEAD, POST" } }), rows: [{ ...row, status: 405 }] };
   }
   // Requiring a JSON content type forces a CORS preflight, which this endpoint never grants:
   // other websites cannot use their visitors' browsers against /a2a.
@@ -137,10 +175,23 @@ export function handleA2a(
     const msg = params.message;
     if (!msg || typeof msg !== "object" || !Array.isArray(msg.parts)) return fail(ERR.invalidParams);
     const contextId = typeof msg.contextId === "string" && msg.contextId ? truncate(msg.contextId, 100) : crypto.randomUUID();
-    return { response: rpc(id, { result: completedTask(style, contextId) }), rows: [r] };
+    const seed: TaskSeed = { c: contextId, t: Date.now(), k: ctx.canary };
+    const taskId = ctx.taskKey ? await issueTaskId(ctx.taskKey, seed) : crypto.randomUUID();
+    r.note = truncate([r.note, `canary:${ctx.canary}`].filter(Boolean).join("; "), 300);
+    const task = completedTask(style, taskId, seed, canaryUrl(ctx.origin, ctx.canary));
+    return { response: rpc(id, { result: style === "v1" ? { task } : task }), rows: [r] };
   }
   if (STREAM.has(method) || LIST.has(method)) return fail(ERR.unsupported);
-  if (TASK_LOOKUP.has(method)) return fail(ERR.taskNotFound);
+  if (GET_TASK.has(method) || CANCEL_TASK.has(method) || SUBSCRIBE_TASK.has(method)) {
+    const params = (m.params && typeof m.params === "object" ? m.params : {}) as Record<string, unknown>;
+    const taskId = asString(params.id) ?? (typeof params.name === "string" ? params.name.replace(/^tasks\//, "") : null);
+    const seed = taskId && ctx.taskKey ? await readTaskId(ctx.taskKey, taskId) : null;
+    if (!taskId || !seed) return fail(ERR.taskNotFound);
+    r.note = "task found";
+    if (CANCEL_TASK.has(method)) return fail(ERR.taskNotCancelable);
+    if (SUBSCRIBE_TASK.has(method)) return fail(ERR.unsupported);
+    return { response: rpc(id, { result: completedTask(style, taskId, seed, canaryUrl(ctx.origin, seed.k)) }), rows: [r] };
+  }
   if (/pushnotificationconfig/i.test(method)) return fail(ERR.pushNotSupported);
   if (EXTENDED.has(method)) return fail(ERR.extendedCard);
   return fail(ERR.methodNotFound);
@@ -158,24 +209,61 @@ export function cardResponse(origin: string, method: string): Response {
   return new Response(JSON.stringify(agentCard(origin), null, 2), { headers });
 }
 
-function completedTask(style: Style, contextId: string): Record<string, unknown> {
-  const id = crypto.randomUUID();
-  const timestamp = new Date().toISOString();
-  const artifactId = crypto.randomUUID();
+type TaskSeed = { c: string; t: number; k: string }; // contextId, issued at (ms), canary token
+
+// Same input, same task: GetTask returns exactly what SendMessage returned.
+function completedTask(style: Style, id: string, seed: TaskSeed, link: string): Record<string, unknown> {
+  const timestamp = new Date(seed.t).toISOString();
+  const text = replyText(link);
   if (style === "v1") {
     return {
-      task: {
-        id, contextId,
-        status: { state: "TASK_STATE_COMPLETED", timestamp },
-        artifacts: [{ artifactId, name: "result", parts: [{ text: REPLY, mediaType: "text/plain" }] }]
-      }
+      id, contextId: seed.c,
+      status: { state: "TASK_STATE_COMPLETED", timestamp },
+      artifacts: [{ artifactId: "result", name: "result", parts: [{ text, mediaType: "text/plain" }] }]
     };
   }
   return {
-    kind: "task", id, contextId,
+    kind: "task", id, contextId: seed.c,
     status: { state: "completed", timestamp },
-    artifacts: [{ artifactId, name: "result", parts: [{ kind: "text", text: REPLY }] }]
+    artifacts: [{ artifactId: "result", name: "result", parts: [{ kind: "text", text }] }]
   };
+}
+
+const b64u = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+function unb64u(s: string): Uint8Array | null {
+  try {
+    const bin = atob(s.replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(bin, (ch) => ch.charCodeAt(0));
+  } catch {
+    return null;
+  }
+}
+async function mac(key: CryptoKey, payload: string): Promise<string> {
+  return b64u(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload))).slice(0, 16));
+}
+
+// Format: t1.<base64url(JSON seed)>.<base64url(HMAC-SHA256, 128 bits)>
+async function issueTaskId(key: CryptoKey, seed: TaskSeed): Promise<string> {
+  const payload = b64u(new TextEncoder().encode(JSON.stringify(seed)));
+  return `t1.${payload}.${await mac(key, payload)}`;
+}
+
+async function readTaskId(key: CryptoKey, id: string): Promise<TaskSeed | null> {
+  const m = /^t1\.([A-Za-z0-9_-]{1,600})\.([A-Za-z0-9_-]{22})$/.exec(id);
+  if (!m) return null;
+  const expected = new TextEncoder().encode(await mac(key, m[1]));
+  const given = new TextEncoder().encode(m[2]);
+  if (expected.length !== given.length || !crypto.subtle.timingSafeEqual(expected, given)) return null;
+  const raw = unb64u(m[1]);
+  if (!raw) return null;
+  try {
+    const seed = JSON.parse(new TextDecoder().decode(raw)) as TaskSeed;
+    if (typeof seed.c !== "string" || typeof seed.t !== "number" || typeof seed.k !== "string") return null;
+    if (Date.now() - seed.t > TASK_TTL_MS || seed.t > Date.now() + 60_000) return null;
+    return seed;
+  } catch {
+    return null;
+  }
 }
 
 function rpc(id: string | number | null, payload: { result: unknown } | { error: RpcError }): Response {

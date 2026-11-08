@@ -3,7 +3,8 @@ import { createServer } from "./tools";
 import { renderHome } from "./page";
 import { handleDash } from "./dash";
 import { redact } from "./redact";
-import { A2A_PATH, CARD_PATHS, cardResponse, handleA2a } from "./a2a";
+import { A2A_PATH, CARD_PATHS, cardResponse, handleA2a, taskKey } from "./a2a";
+import { CANARY_HEADER, CANARY_PATH_RE, canaryPage, canaryUrl, llmsTxt, newCanaryToken } from "./canary";
 import { Row, asString, truncate, truncateOrNull, cleanOrNull, joinKinds } from "./log";
 
 const COLUMNS = [
@@ -63,12 +64,18 @@ export default {
       return new Response("Payload too large\n", { status: 413 });
     }
     base.body_bytes = new TextEncoder().encode(body).length;
+    // The public host is always served over HTTPS; elsewhere (workers.dev, tests) use the request's origin.
+    const origin = url.hostname === env.PUBLIC_HOSTNAME ? `https://${env.PUBLIC_HOSTNAME}` : url.origin;
+    const canary = newCanaryToken();
 
     if (url.pathname === "/mcp") {
       const hasBody = !["GET", "HEAD"].includes(request.method);
+      // The tools read the canary link from this header (set here only; a client's own copy is dropped).
+      const headers = new Headers(request.headers);
+      headers.set(CANARY_HEADER, canaryUrl(origin, canary));
       const forwarded = new Request(request.url, {
         method: request.method,
-        headers: request.headers,
+        headers,
         body: hasBody ? body : undefined
       });
       let response: Response;
@@ -78,12 +85,13 @@ export default {
         log([{ ...base, status: 500, note: truncate(String(err), 300) }]);
         return new Response("Internal error\n", { status: 500 });
       }
-      log(rowsFromMcpBody(body, { ...base, status: response.status }, maxField));
+      log(rowsFromMcpBody(body, { ...base, status: response.status }, maxField, canary));
       return response;
     }
 
     if (url.pathname === A2A_PATH) {
-      const { response, rows } = handleA2a(request, url, body, base, maxField);
+      const ctxA2a = { origin, canary, taskKey: await taskKey(env.IP_SALT) };
+      const { response, rows } = await handleA2a(request, url, body, base, maxField, ctxA2a);
       log(rows);
       return response;
     }
@@ -91,8 +99,6 @@ export default {
     let response: Response;
     if (CARD_PATHS.has(url.pathname)) {
       // Logged as 'a2a' so card fetches show up in the A2A funnel.
-      // The public host is always served over HTTPS; elsewhere (workers.dev, tests) use the request's origin.
-      const origin = url.hostname === env.PUBLIC_HOSTNAME ? `https://${env.PUBLIC_HOSTNAME}` : url.origin;
       response = cardResponse(origin, request.method);
       log([{ ...base, kind: "a2a", status: response.status, note: "agent-card" }]);
       return response;
@@ -103,6 +109,15 @@ export default {
       });
     } else if (url.pathname === "/robots.txt") {
       response = new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } });
+    } else if (url.pathname === "/llms.txt") {
+      response = new Response(llmsTxt(origin, Number(env.RETENTION_DAYS) || 90), {
+        headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=300" }
+      });
+    } else if (CANARY_PATH_RE.test(url.pathname)) {
+      // Visit to a link that only appeared inside a synthetic result.
+      response = canaryPage();
+      log([{ ...base, kind: "http", status: response.status, note: "canary-hit" }]);
+      return response;
     } else {
       response = new Response("Not found\n", { status: 404 });
     }
@@ -149,7 +164,7 @@ function baseRow(request: Request, url: URL, ipHash: string): Row {
   };
 }
 
-function rowsFromMcpBody(body: string, base: Row, maxField: number): Row[] {
+function rowsFromMcpBody(body: string, base: Row, maxField: number, canary: string): Row[] {
   if (!body) return [base];
   let parsed: unknown;
   try {
@@ -159,7 +174,12 @@ function rowsFromMcpBody(body: string, base: Row, maxField: number): Row[] {
     return [{ ...base, note: "invalid JSON", args: truncate(hidden.text, maxField), redactions: joinKinds(hidden.kinds) }];
   }
   const messages = Array.isArray(parsed) ? parsed : [parsed];
-  return messages.slice(0, 20).map((m) => rowFromMessage(m, base, maxField));
+  return messages.slice(0, 20).map((m) => {
+    const row = rowFromMessage(m, base, maxField);
+    // Only calls that pass schema validation (purpose present) get a result with the link.
+    if (row.rpc_method === "tools/call" && row.purpose) row.note = `canary:${canary}`;
+    return row;
+  });
 }
 
 function rowFromMessage(msg: unknown, base: Row, maxField: number): Row {

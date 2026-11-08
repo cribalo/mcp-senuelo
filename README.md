@@ -73,22 +73,30 @@ tope de 32 KiB, la misma ocultación de secretos y la misma tabla.
 
   | Método (1.0 / 0.3) | Respuesta |
   |---|---|
-  | `SendMessage` / `message/send` | tarea `COMPLETED` / `completed` con un *artifact* de texto sintético fijo |
-  | `GetTask`, `CancelTask`, `SubscribeToTask` (y sus nombres 0.3) | `-32001` TaskNotFound, porque no se guarda ninguna tarea |
+  | `SendMessage` / `message/send` | tarea `COMPLETED` / `completed` con un *artifact* de texto sintético fijo y su enlace canario |
+  | `GetTask` / `tasks/get` | la misma tarea completada, reconstruida desde su id firmado; id desconocido, alterado o de más de 7 días → `-32001` |
+  | `CancelTask` / `tasks/cancel` | `-32002` (la tarea ya está completada); id no válido → `-32001` |
+  | `SubscribeToTask` / `tasks/resubscribe` | `-32004`; id no válido → `-32001` |
   | `SendStreamingMessage` / `message/stream`, `ListTasks` | `-32004` Unsupported (la card declara `streaming: false`) |
   | métodos de *push notifications* | `-32003` |
   | `GetExtendedAgentCard` | `-32007` |
 
 - **Navegadores:** `/a2a` exige `Content-Type` `application/json` o `application/a2a+json` (si no,
   responde 415) y no contesta a los *preflight* CORS. Así, ninguna web puede usar el navegador de
-  sus visitantes contra `/a2a`. GET responde 405.
+  sus visitantes contra `/a2a`. `GET` y `HEAD` responden 200 con un JSON que remite a la Agent Card
+  (las sondas de actividad de ALLAGENTS y brick.blue hacen `GET /a2a`); otros métodos, 405.
+- **Tareas sin estado:** el `taskId` es `t1.<base64url(JSON)>.<HMAC>`. El JSON lleva el `contextId`,
+  la hora de emisión y el token canario. La clave HMAC se deriva de `IP_SALT` (etiqueta
+  `a2a-task-id-v1`) y la firma tiene 128 bits. No se guarda nada; `GetTask` verifica la firma y
+  reconstruye la misma respuesta.
 - **Registro** (`kind = 'a2a'`):
   - `purpose` guarda **el texto del mensaje**, porque en A2A el texto es la intención.
   - `tool` guarda el *skill* si viene en `metadata.skillId`, `skill_id` o `skill`.
   - `context_id` y `task_id` (migración `0003_a2a.sql`) permiten seguir conversaciones.
   - `args` guarda el resto de `params`, con los textos y los bytes de ficheros sustituidos por su tamaño.
   - `protocol_version` guarda la cabecera `A2A-Version` (`NULL` = 0.3).
-  - Las lecturas de la Agent Card se guardan con `note = 'agent-card'`.
+  - Las lecturas de la Agent Card se guardan con `note = 'agent-card'`, los `GET /a2a` con
+    `note = 'endpoint info'` y los `GetTask` válidos con `note = 'task found'`.
 - **Directorios (8 nov 2026):** no hay registro oficial de A2A (la especificación no define uno).
   - [ALLAGENTS](https://allagents.app/agent/cribalo-research-agent): dado de alta por API con la
     URL de la Agent Card. El token de edición y las 4 palabras de recuperación están en
@@ -97,9 +105,14 @@ tope de 32 KiB, la misma ocultación de secretos y la misma tabla.
   - [AgentPeering](https://agentpeering.com/publish) y [A2A Registry](https://www.a2a-registry.org/submit):
     alta anónima solo desde su formulario web (sus APIs de publicación piden cuenta).
   - Estos directorios prueban `/a2a` de forma automática (AgentPeering, cada ~30 min y 4 *skills*
-    al día). Al analizar los datos hay que separar ese tráfico por User-Agent y ASN.
+    al día). Al analizar los datos hay que separar ese tráfico por User-Agent y ASN. Ojo: las
+    peticiones de AgentPeering (incluido su chat de prueba) llegan **sin User-Agent** desde la
+    ASN de Cloudflare.
 - **Panel y resumen:** el panel tiene el filtro `a2a`, el contador «mensajes A2A», una serie en la
-  gráfica y la tarjeta «Mensajes A2A». `npm run summary` añade **Embudo A2A** (card → envío →
+  gráfica y la tarjeta «Mensajes A2A». `npm run summary` empieza con **Clasificación por comportamiento** (canario → agente MCP con
+  `purpose` → agente A2A → sonda/verificador → indexador → escáner web → web; gana la primera clase
+  que encaja), sigue con **Canarios visitados**, **Canarios emitidos** y **Mensajes dirigidos al
+  operador** (textos con *claim*, *owner*, *payment*, *badge*, «pass this on»…), y añade **Embudo A2A** (card → envío →
   varios turnos), **Métodos A2A y versión** y **Mensajes A2A**.
 
 ## Qué se guarda (tabla `events`, `migrations/0001_init.sql`, `0002_capabilities_redactions.sql` y `0003_a2a.sql`)
@@ -122,6 +135,26 @@ User-Agent. Del cuerpo de las rutas no MCP solo se guarda el tamaño. Las petici
 el límite (429) no se registran, para que una avalancha no agote las escrituras diarias de D1.
 Sin la sal `IP_SALT`, el campo vale `no-salt`: un hash de IPv4 sin sal se invierte enseguida.
 
+### Enlaces canario (`src/canary.ts`)
+
+Cada resultado sintético lleva un enlace propio `https://mcp.cribalo.com/c/<token>`: los
+`tools/call` de MCP al pie del texto (y `search_documents` además como `url` de cada documento,
+con `?doc=`), y los `SendMessage` de A2A al final de la respuesta. El texto lo presenta como
+«Reference page for this result (visits are logged)». No es una instrucción.
+
+- El token (12 caracteres base32) se genera en el Worker para cada petición. Llega a las
+  herramientas en la cabecera `x-senuelo-canary` de la petición reenviada al SDK; si el cliente
+  manda su propia cabecera, se sobrescribe.
+- La fila que emite el enlace guarda `note = 'canary:<token>'`. Solo se marcan los `tools/call`
+  con `purpose`, porque sin él el SDK rechaza la llamada y no hay resultado.
+- `GET /c/<token>` sirve una página que explica qué es (`noindex`) y se guarda como
+  `kind = 'http'`, `note = 'canary-hit'`.
+- Una visita indica que alguien (un agente, un *fetcher* o una persona) **actuó sobre un
+  resultado**, que es la mejor señal disponible de uso real. `npm run summary` cruza emisión y
+  visita: tiempo transcurrido, si es la misma IP y el UA de cada lado.
+
+`/llms.txt` describe el señuelo, sus endpoints y qué se registra.
+
 ### Ocultación de secretos y datos personales
 
 Antes de guardar, `src/redact.ts` sustituye cada coincidencia por `[REDACTED:<tipo>]` en `args`
@@ -139,11 +172,15 @@ que un agente pegue sin querer. Orden y tipos:
 | `card` | 13–19 dígitos (con espacios o guiones) que pasan Luhn |
 | `iban` | IBAN que pasa mod-97 |
 | `email` | direcciones de correo |
+| `dni` | DNI (8 dígitos + letra) y NIE (X/Y/Z + 7 dígitos + letra) con la letra de control correcta |
+| `phone` | internacionales con `+` o `00` (9–15 dígitos) y españoles de 9 dígitos que empiezan por 6–9 **con separadores** (espacio o guion) |
 | `home_path` | solo el nombre de usuario en `/Users/…`, `/home/…` y `C:\Users\…` |
 
 Decisiones: `sk-` exige que no lo preceda una letra o dígito (si no, `task-force-…` se ocultaría);
 13 dígitos seguidos sin separador no cuentan como tarjeta (son un *epoch* en milisegundos); `home_path`
-no actúa si la ruta va precedida de un dominio (`example.com/home/x`). Las expresiones
+no actúa si la ruta va precedida de un dominio (`example.com/home/x`); los teléfonos españoles sin
+separadores no se ocultan (9 dígitos seguidos son tan a menudo un id como un teléfono) y el punto
+no cuenta como separador (IPv4, versiones). Las expresiones
 son lineales o con cuantificadores acotados (el cuerpo está limitado a 32 KiB y Workers Free da
 unos 10 ms de CPU). Es una red de seguridad, no una garantía: texto libre con datos personales
 no evidentes (nombres, direcciones) sigue guardándose. Pruebas: `node scripts/redact-test.mjs`.
