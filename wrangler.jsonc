@@ -2,23 +2,23 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mcp-senuelo",
   "main": "src/index.ts",
+  // Must be the account that holds the cribalo.com zone ("Femogo@gmail.com's Account").
+  "account_id": "de3e30eb20055289c56d92ef70aecdc9",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
 
   // The only record is D1: Workers Logs would store IPs and bodies elsewhere.
   "observability": { "enabled": false },
 
-  // Deploying with this block creates the DNS record for the custom domain.
-  // Left commented out on purpose: uncomment only after the owner confirms.
-  // "routes": [{ "pattern": "mcp.cribalo.com", "custom_domain": true }],
-  "workers_dev": true,
+  // Deploying with this block creates the DNS record for the custom domain (confirmed 8 Nov 2026).
+  "routes": [{ "pattern": "mcp.cribalo.com", "zone_name": "cribalo.com", "custom_domain": true }],
+  "workers_dev": false,
 
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "mcp-senuelo",
-      // Replace with the id printed by `wrangler d1 create mcp-senuelo`.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "2c8d9c5b-3a23-4ed5-a0ac-c4ad7ca5dc3c",
       "migrations_dir": "migrations"
     }
   ],
@@ -36,7 +36,7 @@
     "RETENTION_DAYS": "90",
     "MAX_BODY_BYTES": "32768",
     "MAX_FIELD_CHARS": "2000",
-    "CONTACT": ""
+    "CONTACT": "contact@cribalo.com"
   }
   // Secret (not here): IP_SALT  ->  `wrangler secret put IP_SALT`; locally in .dev.vars
 }

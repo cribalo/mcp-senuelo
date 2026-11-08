@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 
 const base = process.argv.find((a) => a.startsWith("http")) ?? "http://127.0.0.1:8787";
 const testRateLimit = process.argv.includes("--rate-limit");
+const d1Where = /^http:\/\/(127\.0\.0\.1|localhost)/.test(base) ? "--local" : "--remote";
 const runId = `test-${Date.now()}`;
 let passed = 0;
 async function check(name, fn) {
@@ -121,11 +122,11 @@ await check("cross-site browser Origin is refused", async () => {
 });
 
 await check("D1 has the rows: client, tool, args without purpose, purpose, hashed IP", async () => {
-  await new Promise((r) => setTimeout(r, 500)); // waitUntil writes
+  await new Promise((r) => setTimeout(r, d1Where === "--local" ? 500 : 3000)); // waitUntil writes
   const sql =
     `SELECT kind, rpc_method, client_name, tool, args, purpose, ip_hash, status, path FROM events ` +
     `WHERE purpose LIKE '${runId}%' OR client_version = '${runId}' OR path = '/wp-login.php' OR status = 413`;
-  const out = execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", "--local", "--json", "--command", sql], {
+  const out = execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command", sql], {
     encoding: "utf8"
   });
   const rows = JSON.parse(out)[0].results;

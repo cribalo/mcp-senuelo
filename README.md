@@ -5,8 +5,8 @@ Sirve para registrar **qué clientes y agentes se conectan a un MCP abierto y a 
 (campo obligatorio `purpose`). Lo dice abiertamente en cada herramienta, en las `instructions`
 del servidor y en la página `/`.
 
-Estado: **probado en local, sin desplegar.** El despliegue, el registro DNS y el alta en
-directorios públicos de MCP esperan la confirmación del titular.
+Estado: **en producción en `https://mcp.cribalo.com` desde el 8 nov 2026.** El alta en
+directorios públicos de MCP espera la confirmación del titular.
 
 ## Arquitectura
 
@@ -117,38 +117,68 @@ npm run summary
 Resultado el 8 nov 2026: 12 de 12 pruebas pasan, y la purga del cron, probada con
 `/cdn-cgi/handler/scheduled`, borra una fila de 2020 y conserva las recientes.
 
-## Desplegar (lo hace el titular; **cada paso con su confirmación**)
+## Desplegar
 
-1. Inicia sesión en Cloudflare (lo hace el titular):
-   ```bash
-   npx wrangler login
-   ```
+**Desplegado el 8 nov 2026** en `https://mcp.cribalo.com`, en la cuenta de Cloudflare
+«Femogo@gmail.com's Account» (`de3e30eb…`). Esa cuenta también tiene la zona `cribalo.com`, y
+`wrangler.jsonc` la fija con `account_id`. workers.dev está desactivado: el único acceso es el
+dominio. `contact@cribalo.com` se reenvía con Email Routing.
+
+Lo que aprendimos al desplegar:
+
+- **El Worker y la zona tienen que estar en la misma cuenta.** El primer despliegue fue a otra
+  cuenta («Cribalo») y el dominio falló con el error `10083 The zone does not exist on your
+  account`.
+- **`wrangler login` no funciona en el LXC**, porque espera la respuesta en `localhost:8976`.
+  Usa un token de API exportado como `CLOUDFLARE_API_TOKEN`, con estos permisos:
+  - **Cuenta** (la de la zona): las tres casillas **Edit** de Workers, sin **Admin**, y **D1 → Edit**.
+  - **Zona** `cribalo.com`: **Zone → Read** y **DNS → Edit**. Sin *Zone Read*, wrangler no ve la
+    zona.
+
+  Revoca el token al terminar y bórralo del historial
+  (`sed -i '/CLOUDFLARE_API_TOKEN/d' ~/.bash_history`).
+- `wrangler d1 create` pregunta si quieres añadir la base a `wrangler.jsonc`. Contesta **No** y
+  pon solo el `database_id` en la entrada `DB`.
+
+Para volver a desplegar tras un cambio de código, con un token nuevo:
+```bash
+npx wrangler deploy
+```
+
+Para montarlo desde cero en otra cuenta:
+1. Pon el `account_id` en `wrangler.jsonc`.
 2. Crea la base en la UE:
    ```bash
    npx wrangler d1 create mcp-senuelo --jurisdiction eu
    ```
-   Copia el `database_id` en `wrangler.jsonc`.
-3. Crea las tablas en remoto:
+   Copia el `database_id` en la entrada `DB` de `wrangler.jsonc`.
+3. Crea las tablas:
    ```bash
    npx wrangler d1 migrations apply mcp-senuelo --remote
    ```
-4. Guarda la sal como secreto. Usa una cadena aleatoria larga y no la guardes en el repositorio:
+4. Despliega. Esto crea el registro DNS del dominio:
+   ```bash
+   npx wrangler deploy
+   ```
+5. Guarda la sal como secreto:
    ```bash
    openssl rand -hex 32 | npx wrangler secret put IP_SALT
    ```
-5. Pon una dirección de contacto en `vars.CONTACT` de `wrangler.jsonc`: el RGPD exige
-   identificar al responsable (véase abajo).
-6. `npx wrangler deploy`. Publica el Worker en `mcp-senuelo.<cuenta>.workers.dev`.
-7. **Dominio:** descomenta `routes` (`mcp.cribalo.com`, `custom_domain: true`) y vuelve a
-   desplegar. Cloudflare crea el registro DNS y el certificado. Falla si ya existe un CNAME con
-   ese nombre.
-8. Consulta el registro:
+6. Prueba contra el dominio:
    ```bash
-   node scripts/summary.mjs --remote --days 7
+   node scripts/test-client.mjs https://mcp.cribalo.com
    ```
-   Opciones: `--days`, `--limit`.
+   Las pruebas dejan filas en la base. Bórralas con un `DELETE` de las filas cuyo `user_agent`
+   es `node` o empieza por `senuelo-`, y de las que tienen `purpose` o `client_version` que
+   empiezan por `test-`.
 
-Darlo de alta en directorios públicos de MCP es otro paso, también con confirmación.
+Para consultar el registro:
+```bash
+node scripts/summary.mjs --remote --days 7
+```
+Opciones: `--days`, `--limit`.
+
+Darlo de alta en directorios públicos de MCP es otro paso, que hará falta confirmar.
 
 ## RGPD
 
@@ -184,8 +214,7 @@ Darlo de alta en directorios públicos de MCP es otro paso, también con confirm
 - **Registro de actividades (art. 30) y EIPD:** conviene una entrada breve en el registro. Con
   datos mínimos y seudonimizados no parece hacer falta una EIPD, pero esa decisión es del titular.
 
-## Pendiente antes de desplegar
+## Pendiente
 
-- Rellenar `CONTACT` (sin él la página no muestra contacto y no cumple el art. 13).
-- Decidir la retención (90 días por defecto) y el límite de peticiones (30/60 s).
-- Confirmar el despliegue, el DNS de `mcp.cribalo.com` y, más adelante, el alta en directorios.
+- Revisar la retención (90 días) y el límite de peticiones (30/60 s) cuando haya datos.
+- Alta en directorios públicos de MCP, con la confirmación del titular.
