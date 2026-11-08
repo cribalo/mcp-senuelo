@@ -1,0 +1,42 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mcp-senuelo",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // The only record is D1: Workers Logs would store IPs and bodies elsewhere.
+  "observability": { "enabled": false },
+
+  // Deploying with this block creates the DNS record for the custom domain.
+  // Left commented out on purpose: uncomment only after the owner confirms.
+  // "routes": [{ "pattern": "mcp.cribalo.com", "custom_domain": true }],
+  "workers_dev": true,
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "mcp-senuelo",
+      // Replace with the id printed by `wrangler d1 create mcp-senuelo`.
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // Per hashed IP: 30 requests every 60 s.
+  "ratelimits": [
+    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } }
+  ],
+
+  // Daily purge of rows older than RETENTION_DAYS.
+  "triggers": { "crons": ["17 3 * * *"] },
+
+  "vars": {
+    "PUBLIC_HOSTNAME": "mcp.cribalo.com",
+    "RETENTION_DAYS": "90",
+    "MAX_BODY_BYTES": "32768",
+    "MAX_FIELD_CHARS": "2000",
+    "CONTACT": ""
+  }
+  // Secret (not here): IP_SALT  ->  `wrangler secret put IP_SALT`; locally in .dev.vars
+}

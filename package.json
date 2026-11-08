@@ -1,0 +1,24 @@
+{
+  "name": "mcp-senuelo",
+  "version": "1.0.0",
+  "description": "Research MCP honeypot on Cloudflare Workers",
+  "scripts": {
+    "test": "node scripts/test-client.mjs",
+    "dev": "wrangler dev --port 8787 --ip 127.0.0.1 --test-scheduled",
+    "typecheck": "wrangler types && tsc -p .",
+    "summary": "node scripts/summary.mjs",
+    "db:local": "wrangler d1 migrations apply mcp-senuelo --local"
+  },
+  "private": "true",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/server": "2.4.0",
+    "agents": "0.33.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "2.4.0",
+    "typescript": "5.9.3",
+    "wrangler": "4.158.0"
+  }
+}
