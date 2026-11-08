@@ -36,16 +36,17 @@ cron diario 03:17 UTC ──▶ DELETE de filas con más de RETENTION_DAYS
   `_meta["io.modelcontextprotocol/clientInfo"]` de cada petición. Se guardan los dos. El script
   de resumen asigna a cada llamada el último `clientInfo` visto con el mismo hash de IP y el
   mismo User-Agent.
-- **Herramientas** (`src/tools.ts`): `search_documents`, `fetch_url`, `query_database` y
-  `get_exchange_rate`. Ninguna hace peticiones de red ni ejecuta nada (`fetch_url` no llama a
-  la URL y `query_database` no ejecuta el SQL). Devuelven datos de muestra fijos con la etiqueta
+- **Herramientas** (`src/tools.ts`): `search_documents`, `fetch_url`, `query_database`,
+  `get_exchange_rate`, `execute_script` y `read_file` (6). Ninguna hace peticiones de red ni
+  ejecuta nada (`fetch_url` no llama a la URL, `query_database` no ejecuta el SQL,
+  `execute_script` responde «Execution denied» y `read_file` «Access denied»). Devuelven datos de muestra fijos con la etiqueta
   «Synthetic response… Nothing was executed». Cada una exige `purpose` (de 1 a 500 caracteres),
   y su descripción dice que las llamadas se registran. Las respuestas no llevan instrucciones
   para el agente.
 - **Origin:** el SDK rechaza (403) las peticiones de navegador desde otros dominios, para que
   ninguna web pueda usar el navegador de sus visitantes contra `/mcp`.
 
-## Qué se guarda (tabla `events`, `migrations/0001_init.sql`)
+## Qué se guarda (tabla `events`, `migrations/0001_init.sql` y `0002_capabilities_redactions.sql`)
 
 | Campo | Contenido |
 |---|---|
@@ -55,12 +56,40 @@ cron diario 03:17 UTC ──▶ DELETE de filas con más de RETENTION_DAYS
 | `user_agent`, `http_method`, `path`, `status`, `body_bytes` | ruta **sin** query string |
 | `protocol_version`, `rpc_method`, `rpc_id` | por cada mensaje JSON-RPC (como mucho 20 por lote) |
 | `client_name`, `client_version`, `client_info` | `clientInfo` |
+| `capabilities` | `capabilities` que el cliente declara en `initialize` (JSON recortado; `NULL` en el resto) |
 | `tool`, `args`, `purpose` | herramienta, argumentos sin `purpose` y `purpose` aparte |
+| `redactions` | tipos de dato ocultados en esa fila, sin repetir, ordenados y separados por comas (`NULL` si ninguno) |
 
 Límites: `MAX_FIELD_CHARS` (2000) para argumentos, `purpose` y `clientInfo`, y 500 para el
 User-Agent. Del cuerpo de las rutas no MCP solo se guarda el tamaño. Las peticiones cortadas por
 el límite (429) no se registran, para que una avalancha no agote las escrituras diarias de D1.
 Sin la sal `IP_SALT`, el campo vale `no-salt`: un hash de IPv4 sin sal se invierte enseguida.
+
+### Ocultación de secretos y datos personales
+
+Antes de guardar, `src/redact.ts` sustituye cada coincidencia por `[REDACTED:<tipo>]` en `args`
+(sobre el JSON completo, antes de recortar, para que un secreto cortado a medias no se escape),
+`purpose`, `capabilities`, `client_info`, el nombre y la versión del cliente, y en el cuerpo
+cuando no es JSON válido. Se hace por minimización (RGPD) y para no guardar secretos de terceros
+que un agente pegue sin querer. Orden y tipos:
+
+| Tipo | Qué oculta |
+|---|---|
+| `private_key` | de `-----BEGIN … PRIVATE KEY-----` hasta su `END` (o hasta el final) |
+| `jwt` | tres segmentos base64url que empiezan por `eyJ` |
+| `bearer` | `Bearer` + token de 20 caracteres o más |
+| `api_key` | `sk-…` (también `sk-ant-`, `sk-proj-`), `AKIA…`, `ghp_`/`gho_`/…, `github_pat_`, `xox?-`, `AIza…`, `glpat-` |
+| `card` | 13–19 dígitos (con espacios o guiones) que pasan Luhn |
+| `iban` | IBAN que pasa mod-97 |
+| `email` | direcciones de correo |
+| `home_path` | solo el nombre de usuario en `/Users/…`, `/home/…` y `C:\Users\…` |
+
+Decisiones: `sk-` exige que no lo preceda una letra o dígito (si no, `task-force-…` se ocultaría);
+13 dígitos seguidos sin separador no cuentan como tarjeta (son un *epoch* en milisegundos); `home_path`
+no actúa si la ruta va precedida de un dominio (`example.com/home/x`). Las expresiones
+son lineales o con cuantificadores acotados (el cuerpo está limitado a 32 KiB y Workers Free da
+unos 10 ms de CPU). Es una red de seguridad, no una garantía: texto libre con datos personales
+no evidentes (nombres, direcciones) sigue guardándose. Pruebas: `node scripts/redact-test.mjs`.
 
 **Retención:** 90 días (`RETENTION_DAYS`). La purga corre a diario con un cron. Workers Logs
 está desactivado (`observability.enabled: false`), así que D1 es el único registro.
@@ -69,7 +98,11 @@ está desactivado (`observability.enabled: false`), así que D1 es el único reg
 
 Panel privado para ver el registro casi en tiempo real: contadores, actividad por tipo, feed con
 filtro y búsqueda, detalle de cada evento, clientes MCP, herramientas con sus `purpose`,
-escáneres clasificados, User-Agents y origen. Ventanas de 1 h, 24 h y 7 días.
+escáneres clasificados, User-Agents y origen. Incluye una tarjeta «Embudo» (visitantes →
+`initialize` → `tools/list` → `tools/call`, por hash de IP + User-Agent; el % es sobre el total
+de visitantes, porque los clientes sin estado llaman a herramientas sin pasar por `initialize`) y un contador
+de «datos ocultados» (filas con `redactions`). El detalle de cada evento muestra también
+`capabilities` y `redactions`. Ventanas de 1 h, 24 h y 7 días.
 
 - **Acceso:** una contraseña en el secreto `DASH_PASSWORD` (16 caracteres o más). Sin ese
   secreto, `/dash/api/*` responde 404 y el panel no carga datos. El inicio de sesión deja una
@@ -126,13 +159,31 @@ node scripts/test-client.mjs --rate-limit
 ```bash
 npm run summary
 ```
+```bash
+node scripts/redact-test.mjs
+```
+
+`npm run summary` imprime, además de las secciones de clientes, métodos, herramientas, purposes,
+escáneres, User-Agents y origen (con «cliente declarado» en los encabezados): **Embudo por cliente**
+(todos y por cliente declarado: visitantes que llegan a cualquier petición, `initialize`,
+`tools/list` y `tools/call`, con % sobre el total de visitantes), **Sesiones** (mismo hash de IP y
+User-Agent con huecos de menos de 30 min: número, media de peticiones y de minutos, y sesiones
+con `tools/call`), **Capabilities declaradas** por cliente y **Datos ocultados** por tipo y
+herramienta.
+
+`node scripts/redact-test.mjs` (56 comprobaciones, necesita Node 22.18 o superior para importar
+el `.ts`) prueba positivos y negativos de cada tipo (UUID, marcas de tiempo, un número de 12 dígitos
+o `sk-short` no se ocultan) y el tiempo con entradas adversas de 32 KiB.
 
 `npm test` (`scripts/test-client.mjs`) prueba lo siguiente:
 
 - la página `/` y un 404 de ruta de escáner;
 - un cliente del SDK con el protocolo actual: lista de herramientas, todas con `purpose`
   obligatorio y aviso de registro, y respuestas sintéticas;
-- que `fetch_url` no hace la petición y que una llamada sin `purpose` se rechaza;
+- que `fetch_url` no hace la petición, que `execute_script` y `read_file` deniegan y que una
+  llamada sin `purpose` se rechaza;
+- que una clave `sk-…`, un correo y `/Users/alice/…` mandados en `purpose` y `args` no llegan a D1
+  y `redactions` vale `api_key,email,home_path`; y que `capabilities` se guarda;
 - un cliente de 2025 con peticiones a mano;
 - el 413 por cuerpo grande y el 403 por Origin ajeno;
 - que las filas llegan a D1: `clientInfo`, `purpose` separado de `args` y `ip_hash` en hexadecimal.
@@ -142,7 +193,7 @@ npm run summary
 
 `--rate-limit` añade la comprobación del 429.
 
-Resultado el 8 nov 2026: 19 de 19 pruebas pasan en local, y la purga del cron, probada con
+Resultado el 8 nov 2026: 21 de 21 pruebas pasan en local, y la purga del cron, probada con
 `/cdn-cgi/handler/scheduled`, borra una fila de 2020 y conserva las recientes.
 
 ## Desplegar
@@ -180,10 +231,13 @@ Para montarlo desde cero en otra cuenta:
    npx wrangler d1 create mcp-senuelo --jurisdiction eu
    ```
    Copia el `database_id` en la entrada `DB` de `wrangler.jsonc`.
-3. Crea las tablas:
+3. Crea las tablas (aplica `0001` y `0002`):
    ```bash
    npx wrangler d1 migrations apply mcp-senuelo --remote
    ```
+   En una base ya en producción, aplica la migración `0002_capabilities_redactions.sql` con
+   ese mismo comando **antes** de `wrangler deploy`: el código nuevo escribe las columnas
+   `capabilities` y `redactions`, y sin ellas fallarían todos los registros.
 4. Despliega. Esto crea el registro DNS del dominio:
    ```bash
    npx wrangler deploy
@@ -227,7 +281,8 @@ Darlo de alta en directorios públicos de MCP es otro paso, que hará falta conf
   art. 89: solo agregados, sin `purpose` literales que puedan identificar a alguien.
 - **Información (art. 13):** la dan la página `/` (con la base jurídica, los derechos y la
   AEPD), la descripción de cada herramienta y las `instructions` del servidor.
-- **Minimización:** no se guarda la IP en claro, ni la query string, ni el cuerpo de las rutas
+- **Minimización:** los secretos y datos personales evidentes se ocultan antes de guardar (ver
+  «Ocultación»); no se guarda la IP en claro, ni la query string, ni el cuerpo de las rutas
   no MCP; los campos van recortados. El servidor no pide sampling, elicitation ni roots, y no
   intenta sacar datos al agente o a su usuario.
 - **Conservación:** 90 días con purga automática. Si se cambia la sal, las filas antiguas ya no

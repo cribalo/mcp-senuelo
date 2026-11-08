@@ -2,6 +2,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { createServer } from "./tools";
 import { renderHome } from "./page";
 import { handleDash } from "./dash";
+import { redact } from "./redact";
 
 type Row = {
   kind: "mcp" | "http" | "rejected";
@@ -20,16 +21,18 @@ type Row = {
   client_name: string | null;
   client_version: string | null;
   client_info: string | null;
+  capabilities: string | null;
   tool: string | null;
   args: string | null;
   purpose: string | null;
   note: string | null;
+  redactions: string | null;
 };
 
 const COLUMNS = [
   "ts", "kind", "ip_hash", "country", "asn", "as_org", "user_agent", "http_method", "path", "status",
   "body_bytes", "protocol_version", "rpc_method", "rpc_id", "client_name", "client_version",
-  "client_info", "tool", "args", "purpose", "note"
+  "client_info", "tool", "args", "purpose", "note", "capabilities", "redactions"
 ] as const;
 const INSERT_SQL = `INSERT INTO events (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")})`;
 
@@ -144,10 +147,12 @@ function baseRow(request: Request, url: URL, ipHash: string): Row {
     client_name: null,
     client_version: null,
     client_info: null,
+    capabilities: null,
     tool: null,
     args: null,
     purpose: null,
-    note: null
+    note: null,
+    redactions: null
   };
 }
 
@@ -157,7 +162,8 @@ function rowsFromMcpBody(body: string, base: Row, maxField: number): Row[] {
   try {
     parsed = JSON.parse(body);
   } catch {
-    return [{ ...base, note: "invalid JSON", args: truncate(body, maxField) }];
+    const hidden = redact(body);
+    return [{ ...base, note: "invalid JSON", args: truncate(hidden.text, maxField), redactions: joinKinds(hidden.kinds) }];
   }
   const messages = Array.isArray(parsed) ? parsed : [parsed];
   return messages.slice(0, 20).map((m) => rowFromMessage(m, base, maxField));
@@ -176,21 +182,32 @@ function rowFromMessage(msg: unknown, base: Row, maxField: number): Row {
     protocol_version:
       truncateOrNull(asString(params.protocolVersion ?? meta[META_PROTOCOL]), 50) ?? base.protocol_version
   };
+  const kinds = new Set<string>();
+  // Redact first, truncate after: a secret cut in half would no longer match its pattern.
+  const clean = (v: string): string => {
+    const r = redact(v);
+    r.kinds.forEach((k) => kinds.add(k));
+    return r.text;
+  };
   if (clientInfo && typeof clientInfo === "object") {
-    row.client_name = truncateOrNull(asString(clientInfo.name), 200);
-    row.client_version = truncateOrNull(asString(clientInfo.version), 100);
-    row.client_info = truncate(JSON.stringify(clientInfo), maxField);
+    row.client_name = truncateOrNull(cleanOrNull(asString(clientInfo.name), clean), 200);
+    row.client_version = truncateOrNull(cleanOrNull(asString(clientInfo.version), clean), 100);
+    row.client_info = truncate(clean(JSON.stringify(clientInfo)), maxField);
+  }
+  if (m.method === "initialize" && params.capabilities !== undefined) {
+    row.capabilities = truncate(clean(JSON.stringify(params.capabilities)), maxField);
   }
   if (m.method === "tools/call") {
     row.tool = truncateOrNull(asString(params.name), 100);
     const args = { ...(params.arguments && typeof params.arguments === "object" ? params.arguments : {}) };
-    row.purpose = truncateOrNull(asString(args.purpose), maxField);
+    row.purpose = truncateOrNull(cleanOrNull(asString(args.purpose), clean), maxField);
     delete args.purpose;
-    row.args = truncate(JSON.stringify(args), maxField);
+    row.args = truncate(clean(JSON.stringify(args)), maxField);
   } else if (typeof m.method === "string" && m.method !== "initialize") {
     const { _meta, ...rest } = params;
-    if (Object.keys(rest).length) row.args = truncate(JSON.stringify(rest), maxField);
+    if (Object.keys(rest).length) row.args = truncate(clean(JSON.stringify(rest)), maxField);
   }
+  row.redactions = joinKinds([...kinds]);
   return row;
 }
 
@@ -250,4 +267,11 @@ function truncate(s: string, n: number): string {
 }
 function truncateOrNull(s: string | null | undefined, n: number): string | null {
   return s == null ? null : truncate(s, n);
+}
+
+function cleanOrNull(s: string | null, clean: (v: string) => string): string | null {
+  return s == null ? null : clean(s);
+}
+function joinKinds(kinds: string[]): string | null {
+  return kinds.length ? [...kinds].sort().join(",") : null;
 }

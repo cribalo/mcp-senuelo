@@ -36,7 +36,7 @@ input:focus, button:focus-visible { outline: 2px solid var(--mcp); outline-offse
 .live.off { color: var(--muted); } .live.off .dot { background: var(--muted); animation: none; }
 @keyframes pulse { 0% { box-shadow: 0 0 0 0 var(--mcp); } 70% { box-shadow: 0 0 0 8px transparent; } 100% { box-shadow: 0 0 0 0 transparent; } }
 .notice { background: var(--panel); border: 1px dashed var(--http); color: var(--http); padding: .4rem .8rem; border-radius: 6px; font-size: .85rem; }
-.counters { display: grid; grid-template-columns: repeat(6, 1fr); gap: .75rem; margin-bottom: 1rem; }
+.counters { display: grid; grid-template-columns: repeat(7, 1fr); gap: .75rem; margin-bottom: 1rem; }
 .counter { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: .7rem .9rem; border-top: 2px solid var(--c, var(--mcp)); }
 .counter b { display: block; font-size: 1.6rem; font-family: var(--sans); }
 .counter span { color: var(--muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
@@ -62,7 +62,7 @@ td.num { text-align: right; }
 .chip.mcp { --c: var(--mcp); } .chip.http { --c: var(--http); } .chip.rejected { --c: var(--rejected); } .chip.aware { --c: var(--aware); }
 .bar { display: grid; grid-template-columns: minmax(80px, 40%) 1fr auto; gap: .5rem; align-items: center; font-size: .8rem; margin: .2rem 0; }
 .bar .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.bar .track { background: var(--bg); height: .55rem; border-radius: 3px; overflow: hidden; } .bar .fill { height: 100%; background: var(--mcp); }
+.bar .track { background: var(--bg); height: .55rem; border-radius: 3px; overflow: hidden; } .bar .fill { display: block; height: 100%; background: var(--mcp); }
 .origin-cols { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; } .origin-cols h3 { font-size: .75rem; color: var(--muted); margin: 0 0 .3rem; font-weight: 400; }
 .tool-row { display: flex; gap: .75rem; align-items: baseline; margin: .3rem 0 .5rem; font-size: .9rem; } .tool-row b { color: var(--mcp); }
 .quotes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: .6rem; margin-bottom: .8rem; }

@@ -27,6 +27,9 @@ await check("GET / explains the server", async () => {
   const html = await res.text();
   assert.match(html, /señuelo con fines de investigación/);
   assert.match(html, /research honeypot/);
+  assert.match(html, /REDACTED/);
+  assert.match(html, /nunca se ceden ni se venden/);
+  assert.match(html, /never shared or sold/);
 });
 
 await check("unknown path is 404 and logged", async () => {
@@ -39,9 +42,9 @@ await check("SDK client connects (current protocol)", async () => {
   await client.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp")));
 });
 
-await check("tools/list: 4 fake tools, all require purpose and announce logging", async () => {
+await check("tools/list: 6 fake tools, all require purpose and announce logging", async () => {
   const { tools } = await client.listTools();
-  assert.deepEqual(tools.map((t) => t.name).sort(), ["fetch_url", "get_exchange_rate", "query_database", "search_documents"]);
+  assert.deepEqual(tools.map((t) => t.name).sort(), ["execute_script", "fetch_url", "get_exchange_rate", "query_database", "read_file", "search_documents"]);
   for (const t of tools) {
     assert.ok(t.inputSchema.required?.includes("purpose"), `${t.name} lacks required purpose`);
     assert.match(t.description, /calls are logged/);
@@ -63,6 +66,16 @@ await check("fetch_url does not fetch", async () => {
     arguments: { url: "http://169.254.169.254/latest/meta-data", purpose: `${runId} ssrf probe` }
   });
   assert.match(r.content[0].text, /was not fetched/);
+});
+
+await check("execute_script and read_file are denied", async () => {
+  const a = await client.callTool({
+    name: "execute_script",
+    arguments: { language: "bash", code: "id", purpose: `${runId} exec probe` }
+  });
+  assert.match(a.content[0].text, /Execution denied.*Nothing was executed/s);
+  const b = await client.callTool({ name: "read_file", arguments: { path: "/etc/passwd", purpose: `${runId} read probe` } });
+  assert.match(b.content[0].text, /Access denied.*Nothing was read/s);
 });
 
 await check("tools/call without purpose is rejected", async () => {
@@ -88,7 +101,7 @@ await check("2025-era client: raw initialize + tools/call", async () => {
     headers,
     body: JSON.stringify({
       jsonrpc: "2.0", id: 1, method: "initialize",
-      params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "senuelo-legacy-test", version: runId } }
+      params: { protocolVersion: "2025-06-18", capabilities: { roots: {} }, clientInfo: { name: "senuelo-legacy-test", version: runId } }
     })
   });
   assert.equal(init.status, 200, await init.clone().text());
@@ -102,6 +115,32 @@ await check("2025-era client: raw initialize + tools/call", async () => {
   });
   assert.equal(call.status, 200);
   assert.match(await call.text(), /not executed/);
+});
+
+const secretKey = "sk-ant-api03-ABCDEFGHIJKLMNOP1234567890";
+await check("secrets in purpose and args are redacted before storage", async () => {
+  const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", "user-agent": "senuelo-redact-test/1.0" };
+  const res = await fetch(base + "/mcp", {
+    method: "POST",
+    headers,
+    body: JSON.stringify({
+      jsonrpc: "2.0", id: 5, method: "tools/call",
+      params: {
+        name: "read_file",
+        arguments: { path: "/Users/alice/.ssh/notes.txt", purpose: `${runId}-redact key ${secretKey} mail bob@example.com` }
+      }
+    })
+  });
+  assert.equal(res.status, 200);
+  await new Promise((r) => setTimeout(r, d1Where === "--local" ? 500 : 3000));
+  const out = execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command",
+    `SELECT * FROM events WHERE purpose LIKE '${runId}-redact%'`], { encoding: "utf8" });
+  const rows = JSON.parse(out)[0].results;
+  assert.equal(rows.length, 1);
+  const dump = JSON.stringify(rows[0]);
+  for (const v of [secretKey, "bob@example.com", "alice"]) assert.ok(!dump.includes(v), `${v} stored`);
+  assert.equal(rows[0].redactions, "api_key,email,home_path");
+  assert.match(rows[0].args, /\/Users\/\[REDACTED:home_path\]\/\.ssh/);
 });
 
 await check("oversized body is rejected with 413", async () => {
@@ -125,7 +164,7 @@ await check("cross-site browser Origin is refused", async () => {
 await check("D1 has the rows: client, tool, args without purpose, purpose, hashed IP", async () => {
   await new Promise((r) => setTimeout(r, d1Where === "--local" ? 500 : 3000)); // waitUntil writes
   const sql =
-    `SELECT kind, rpc_method, client_name, tool, args, purpose, ip_hash, status, path FROM events ` +
+    `SELECT kind, rpc_method, client_name, capabilities, tool, args, purpose, ip_hash, status, path FROM events ` +
     `WHERE purpose LIKE '${runId}%' OR client_version = '${runId}' OR path = '/wp-login.php' OR status = 413`;
   const out = execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command", sql], {
     encoding: "utf8"
@@ -135,6 +174,7 @@ await check("D1 has the rows: client, tool, args without purpose, purpose, hashe
   assert.ok(calls.length >= 3, `tool calls logged: ${calls.length}`);
   assert.ok(calls.every((r) => !r.args.includes("purpose")), "purpose leaked into args");
   assert.ok(rows.some((r) => r.rpc_method === "initialize" && r.client_name === "senuelo-legacy-test"));
+  assert.ok(rows.some((r) => r.rpc_method === "initialize" && r.capabilities === '{"roots":{}}'), "capabilities not logged");
   assert.ok(rows.some((r) => r.client_name === "senuelo-test-client"), "SDK clientInfo not logged");
   assert.ok(rows.some((r) => r.kind === "http" && r.path === "/wp-login.php"));
   assert.ok(rows.some((r) => r.kind === "rejected" && r.status === 413));

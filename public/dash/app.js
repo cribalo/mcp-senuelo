@@ -143,6 +143,7 @@
     const list = windowed();
     const withC = withClients(list);
     renderCounters(list);
+    renderFunnel(list);
     drawChart(list);
     renderFeed(list);
     renderClients(withC);
@@ -158,13 +159,37 @@
       ["mensajes MCP", list.filter((e) => e.kind === "mcp").length, "--mcp"],
       ["llamadas a herramientas", list.filter((e) => e.tool).length, "--mcp"],
       ["purposes", list.filter((e) => e.purpose).length, "--aware"],
-      ["escáneres", list.filter((e) => e.kind === "http").length, "--http"]
+      ["escáneres", list.filter((e) => e.kind === "http").length, "--http"],
+      ["datos ocultados", list.filter((e) => e.redactions).length, "--rejected"]
     ];
     const box = $("counters"); box.replaceChildren();
     for (const [label, n, v] of items) {
       const c = el("div", "counter"); c.style.setProperty("--c", "var(" + v + ")");
       c.append(el("b", null, n.toLocaleString("es-ES")), el("span", null, label)); box.append(c);
     }
+  }
+  // Per visitor (hashed IP + User-Agent): how far each one got. Percentages are over the previous step.
+  function renderFunnel(list) {
+    const steps = [["visitantes", null], ["initialize", "initialize"], ["tools/list", "tools/list"], ["tools/call", "tools/call"]];
+    const sets = steps.map(() => new Set());
+    for (const e of list) {
+      const key = e.ip_hash + "|" + (e.user_agent || "");
+      sets[0].add(key);
+      for (let i = 1; i < steps.length; i++) if (e.rpc_method === steps[i][1]) sets[i].add(key);
+    }
+    const box = el("div"); const top = sets[0].size;
+    steps.forEach(([label], i) => {
+      // % over all visitors, not the previous step: stateless clients call tools without initialize.
+      const n = sets[i].size;
+      const row = el("div", "bar");
+      const track = el("span", "track"); const f = el("span", "fill");
+      f.style.width = (top ? Math.max(n ? 2 : 0, (n / top) * 100) : 0) + "%"; track.append(f);
+      const pct = i === 0 ? "" : (top ? Math.round((n / top) * 100) : 0) + "% · ";
+      row.append(el("span", "lbl", label), track, el("span", null, pct + n.toLocaleString("es-ES")));
+      box.append(row);
+    });
+    if (!top) box.append(el("p", "empty", "Sin datos."));
+    fill("p-funnel", box);
   }
   function kindChip(kind) { return el("span", "chip " + kind, kind); }
 
@@ -215,7 +240,7 @@
       r.msgs++; if (e.tool) r.calls++; r.ips.add(e.ip_hash); if (e.ts > r.last) r.last = e.ts;
     }
     const rows = [...m.values()].sort((a, b) => b.msgs - a.msgs).map((r) => [r.name + (r.ver ? " " + r.ver : ""), r.msgs, r.calls, r.ips.size, fmtTime(r.last)]);
-    fill("p-clients", rows.length ? table(["cliente", "msgs", "llamadas", "IPs", "última"], rows) : el("p", "empty", "Sin clientes."));
+    fill("p-clients", rows.length ? table(["cliente declarado", "msgs", "llamadas", "IPs", "última"], rows) : el("p", "empty", "Sin clientes."));
   }
   function renderTools(withC) {
     const byTool = new Map();
@@ -322,7 +347,7 @@
   });
 
   // ---- drawer ----
-  const FIELDS = ["id", "ts", "kind", "ip_hash", "country", "asn", "as_org", "user_agent", "http_method", "path", "status", "body_bytes", "protocol_version", "rpc_method", "rpc_id", "client_name", "client_version", "client_info", "tool", "args", "purpose", "note"];
+  const FIELDS = ["id", "ts", "kind", "ip_hash", "country", "asn", "as_org", "user_agent", "http_method", "path", "status", "body_bytes", "protocol_version", "rpc_method", "rpc_id", "client_name", "client_version", "client_info", "capabilities", "tool", "args", "purpose", "note", "redactions"];
   function openDrawer(e) {
     $("drawer-id").textContent = "#" + e.id;
     const dl = el("dl");
@@ -330,7 +355,7 @@
       const wrap = el("div", "field"); wrap.append(el("dt", null, f));
       const v = e[f];
       const dd = el("dd");
-      if ((f === "client_info" || f === "args") && v) {
+      if ((f === "client_info" || f === "args" || f === "capabilities") && v) {
         let text = v; try { text = JSON.stringify(JSON.parse(v), null, 2); } catch { /* keep raw */ }
         dd.append(el("pre", null, text));
       } else dd.textContent = v === null || v === undefined ? "–" : String(v);

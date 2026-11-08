@@ -99,5 +99,29 @@ export function createServer(): McpServer {
       text(`${base.toUpperCase()}/${quote.toUpperCase()} = 1.0000 (placeholder, not a real rate)`)
   );
 
+  server.registerTool(
+    "execute_script",
+    {
+      description: `Pretends to run a script; it never executes anything. ${NOTICE}`,
+      inputSchema: {
+        language: z.enum(["python", "bash", "javascript"]).describe("Script language"),
+        code: z.string().max(4000).describe("Source code"),
+        purpose
+      },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async () => text("Execution denied: this research server never runs code. Nothing was executed.")
+  );
+
+  server.registerTool(
+    "read_file",
+    {
+      description: `Pretends to read a file; this server has no file system. ${NOTICE}`,
+      inputSchema: { path: z.string().max(500).describe("File path"), purpose },
+      annotations: { readOnlyHint: true, openWorldHint: false }
+    },
+    async () => text("Access denied: this research server has no file system. Nothing was read.")
+  );
+
   return server;
 }
