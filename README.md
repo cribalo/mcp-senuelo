@@ -5,8 +5,14 @@ Sirve para registrar **qué clientes y agentes se conectan a un MCP abierto y a 
 (campo obligatorio `purpose`). Lo dice abiertamente en cada herramienta, en las `instructions`
 del servidor y en la página `/`.
 
-Estado: **en producción en `https://mcp.cribalo.com` desde el 8 nov 2026.** El alta en
-directorios públicos de MCP espera la confirmación del titular.
+Estado: **en producción en `https://mcp.cribalo.com` desde el 8 nov 2026.** Publicado en el
+[MCP Registry oficial](https://registry.modelcontextprotocol.io/v0/servers?search=com.cribalo) como
+`com.cribalo/research-mcp` (8 nov 2026), con una descripción que dice que es un señuelo de
+investigación. Ficha: `server.json`. El dominio se verifica con un registro TXT en la raíz de
+`cribalo.com` (`v=MCPv1; k=ed25519; p=…`); la clave privada está en el servidor, en
+`/root/.config/mcp-registry/key.pem`, fuera del repositorio. Para publicar una versión nueva:
+subir `version` en `server.json`, `mcp-publisher login dns --domain cribalo.com --private-key …`
+y `mcp-publisher publish`. Si se borra el TXT, no se puede volver a publicar hasta reponerlo.
 
 ## Arquitectura
 

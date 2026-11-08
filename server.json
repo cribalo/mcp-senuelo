@@ -1,0 +1,11 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.cribalo/research-mcp",
+  "title": "Cribalo research MCP (decoy)",
+  "description": "Research decoy: fake tools, nothing is executed, every call is logged. Details on the website.",
+  "websiteUrl": "https://mcp.cribalo.com/",
+  "version": "1.1.0",
+  "remotes": [
+    { "type": "streamable-http", "url": "https://mcp.cribalo.com/mcp" }
+  ]
+}
