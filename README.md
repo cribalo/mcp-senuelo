@@ -89,6 +89,15 @@ tope de 32 KiB, la misma ocultación de secretos y la misma tabla.
   - `args` guarda el resto de `params`, con los textos y los bytes de ficheros sustituidos por su tamaño.
   - `protocol_version` guarda la cabecera `A2A-Version` (`NULL` = 0.3).
   - Las lecturas de la Agent Card se guardan con `note = 'agent-card'`.
+- **Directorios (8 nov 2026):** no hay registro oficial de A2A (la especificación no define uno).
+  - [ALLAGENTS](https://allagents.app/agent/cribalo-research-agent): dado de alta por API con la
+    URL de la Agent Card. El token de edición y las 4 palabras de recuperación están en
+    `/root/.config/a2a-directories/allagents.json` (permisos 600, fuera del repositorio). Sirven
+    para editar o retirar la ficha (`POST /update`, `/delist`).
+  - [AgentPeering](https://agentpeering.com/publish) y [A2A Registry](https://www.a2a-registry.org/submit):
+    alta anónima solo desde su formulario web (sus APIs de publicación piden cuenta).
+  - Estos directorios prueban `/a2a` de forma automática (AgentPeering, cada ~30 min y 4 *skills*
+    al día). Al analizar los datos hay que separar ese tráfico por User-Agent y ASN.
 - **Panel y resumen:** el panel tiene el filtro `a2a`, el contador «mensajes A2A», una serie en la
   gráfica y la tarjeta «Mensajes A2A». `npm run summary` añade **Embudo A2A** (card → envío →
   varios turnos), **Métodos A2A y versión** y **Mensajes A2A**.
