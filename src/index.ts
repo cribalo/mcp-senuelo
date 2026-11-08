@@ -1,6 +1,7 @@
 import { createMcpHandler } from "agents/mcp/server";
 import { createServer } from "./tools";
 import { renderHome } from "./page";
+import { handleDash } from "./dash";
 
 type Row = {
   kind: "mcp" | "http" | "rejected";
@@ -72,6 +73,11 @@ export default {
     }
 
     const body = await readCapped(request, maxBody);
+    // Private dashboard: never logged, so the owner's own browsing does not pollute the data.
+    if (url.pathname === "/dash" || url.pathname.startsWith("/dash/")) {
+      if (body === null) return new Response("Payload too large\n", { status: 413 });
+      return handleDash(request, url, env, body);
+    }
     if (body === null) {
       log([{ ...base, kind: "rejected", status: 413, note: `body > ${maxBody} bytes` }]);
       return new Response("Payload too large\n", { status: 413 });

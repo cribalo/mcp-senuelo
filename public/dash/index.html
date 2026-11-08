@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <meta name="color-scheme" content="dark light">
+  <title>Señuelo MCP · en directo</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <section id="login" class="login" hidden>
+    <form id="login-form" class="login-box" autocomplete="off">
+      <h1>Señuelo MCP</h1>
+      <p class="muted">Panel privado</p>
+      <label for="password" class="sr">Contraseña</label>
+      <input id="password" name="password" type="password" placeholder="Contraseña" autocomplete="current-password" required>
+      <button type="submit" id="login-btn">Entrar</button>
+      <p id="login-error" class="error" role="alert" hidden></p>
+    </form>
+  </section>
+
+  <div id="app" hidden>
+    <header class="top">
+      <h1>Señuelo MCP <span class="muted">· en directo</span></h1>
+      <div class="top-right">
+        <span id="live" class="live"><span class="dot"></span><span id="live-text">en directo</span></span>
+        <div id="window" class="seg" role="group" aria-label="Ventana">
+          <button type="button" data-w="1h">1 h</button>
+          <button type="button" data-w="24h" class="on">24 h</button>
+          <button type="button" data-w="7d">7 d</button>
+        </div>
+        <span class="muted small">act. <span id="updated">–</span></span>
+        <button type="button" id="logout" class="ghost">Salir</button>
+      </div>
+    </header>
+    <p id="capped" class="notice" hidden>Mostrando los 5000 más recientes.</p>
+
+    <section class="counters" id="counters"></section>
+
+    <section class="card">
+      <h2>Actividad</h2>
+      <div class="legend" id="legend"></div>
+      <div class="chart-wrap"><canvas id="chart"></canvas><div id="tip" class="tip" hidden></div></div>
+    </section>
+
+    <section class="card">
+      <div class="feed-head">
+        <h2>Feed</h2>
+        <div id="kinds" class="seg" role="group" aria-label="Tipo">
+          <button type="button" data-k="all" class="on">todos</button>
+          <button type="button" data-k="mcp">mcp</button>
+          <button type="button" data-k="http">http</button>
+          <button type="button" data-k="rejected">rejected</button>
+        </div>
+        <input id="search" type="search" placeholder="Buscar en todos los campos…" aria-label="Buscar">
+      </div>
+      <div class="scroll"><table class="feed" id="feed"><tbody></tbody></table></div>
+    </section>
+
+    <div class="grid">
+      <section class="card"><h2>Clientes MCP</h2><div class="scroll" id="p-clients"></div></section>
+      <section class="card"><h2>Origen</h2><div id="p-origin"></div></section>
+      <section class="card wide"><h2>Herramientas y purposes</h2><div id="p-tools"></div></section>
+      <section class="card"><h2>Escáneres</h2><div class="scroll" id="p-scanners"></div></section>
+      <section class="card"><h2>User-Agents</h2><div class="scroll" id="p-uas"></div></section>
+    </div>
+  </div>
+
+  <aside id="drawer" class="drawer" hidden aria-label="Detalle del evento">
+    <div class="drawer-head"><strong>Evento <span id="drawer-id"></span></strong><button type="button" id="drawer-close" class="ghost">Cerrar</button></div>
+    <div id="drawer-body" class="drawer-body"></div>
+  </aside>
+  <div id="scrim" class="scrim" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -3,6 +3,7 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 const base = process.argv.find((a) => a.startsWith("http")) ?? "http://127.0.0.1:8787";
 const testRateLimit = process.argv.includes("--rate-limit");
@@ -138,6 +139,81 @@ await check("D1 has the rows: client, tool, args without purpose, purpose, hashe
   assert.ok(rows.some((r) => r.kind === "http" && r.path === "/wp-login.php"));
   assert.ok(rows.some((r) => r.kind === "rejected" && r.status === 413));
   assert.ok(rows.every((r) => /^[0-9a-f]{16}$/.test(r.ip_hash)), "ip_hash is not a 16-hex HMAC");
+});
+
+// ---- /dash ----
+function dashPassword() {
+  if (process.env.DASH_PASSWORD) return process.env.DASH_PASSWORD;
+  const m = /^DASH_PASSWORD=(.*)$/m.exec(readFileSync(new URL("../.dev.vars", import.meta.url), "utf8"));
+  return m ? m[1].trim() : "";
+}
+const post = (path, body, type = "application/json") =>
+  fetch(base + path, { method: "POST", headers: { "content-type": type }, body });
+let sessionCookie = "";
+const withCookie = (c) => ({ headers: { cookie: c } });
+
+await check("GET /dash/ is HTML with a strict CSP", async () => {
+  const res = await fetch(base + "/dash/");
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /text\/html/);
+  assert.match(res.headers.get("content-security-policy") ?? "", /script-src 'self'/);
+});
+
+await check("dash API without cookie is 401; bad password 401; text/plain refused", async () => {
+  assert.equal((await fetch(base + "/dash/api/events")).status, 401);
+  assert.equal((await post("/dash/api/login", JSON.stringify({ password: "wrong-password-xxxxxxxx" }))).status, 401);
+  const res = await post("/dash/api/login", JSON.stringify({ password: dashPassword() }), "text/plain");
+  assert.ok(res.status >= 400 && res.status < 500, `status ${res.status}`);
+});
+
+await check("login sets a HttpOnly Secure SameSite=Strict cookie", async () => {
+  const res = await post("/dash/api/login", JSON.stringify({ password: dashPassword() }));
+  assert.equal(res.status, 204);
+  const sc = res.headers.get("set-cookie") ?? "";
+  assert.match(sc, /^dash_session=\d+\.[0-9a-f]{64};/);
+  for (const a of ["HttpOnly", "Secure", "SameSite=Strict", "Path=/dash"]) assert.ok(sc.includes(a), `missing ${a}`);
+  sessionCookie = sc.split(";")[0];
+});
+
+await check("with the cookie: session 204, events contain this run, after=max_id is empty or newer", async () => {
+  assert.equal((await fetch(base + "/dash/api/session", withCookie(sessionCookie))).status, 204);
+  const res = await fetch(base + "/dash/api/events", withCookie(sessionCookie));
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("cache-control"), /no-store/);
+  const data = await res.json();
+  assert.ok(Array.isArray(data.events) && typeof data.capped === "boolean");
+  assert.ok(data.events.some((e) => e.purpose?.startsWith(runId)), "no row from this run");
+  assert.ok(data.events.every((e, i, a) => i === 0 || a[i - 1].id < e.id), "not ascending");
+  assert.equal(data.max_id, data.events.at(-1).id);
+  const next = await (await fetch(base + `/dash/api/events?after=${data.max_id}`, withCookie(sessionCookie))).json();
+  assert.ok(next.events.every((e) => e.id > data.max_id));
+});
+
+await check("tampered or expired cookie is 401", async () => {
+  const [name, value] = sessionCookie.split("=");
+  const [exp, mac] = value.split(".");
+  const flipped = mac.slice(0, -1) + (mac.endsWith("0") ? "1" : "0");
+  assert.equal((await fetch(base + "/dash/api/session", withCookie(`${name}=${exp}.${flipped}`))).status, 401);
+  const past = Number(exp) - 100000; // valid-looking exp, MAC no longer matches
+  assert.equal((await fetch(base + "/dash/api/events", withCookie(`${name}=${past}.${mac}`))).status, 401);
+});
+
+await check("logout clears the cookie", async () => {
+  const res = await post("/dash/api/logout", "");
+  assert.equal(res.status, 204);
+  assert.match(res.headers.get("set-cookie"), /Max-Age=0/);
+});
+
+await check("/dash requests are not in D1", async () => {
+  await new Promise((r) => setTimeout(r, d1Where === "--local" ? 500 : 3000));
+  const out = execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command",
+    "SELECT COUNT(*) AS n FROM events WHERE path LIKE '/dash%'"], { encoding: "utf8" });
+  assert.equal(JSON.parse(out)[0].results[0].n, 0);
+});
+
+await check("app.js has no HTML-injection sinks", async () => {
+  const js = readFileSync(new URL("../public/dash/app.js", import.meta.url), "utf8");
+  assert.doesNotMatch(js, /innerHTML|insertAdjacentHTML|outerHTML|document\.write|eval\(|new Function/);
 });
 
 if (testRateLimit) {

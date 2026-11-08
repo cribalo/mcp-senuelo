@@ -51,6 +51,21 @@ const sections = [
      FROM ev WHERE kind <> 'mcp' GROUP BY path, http_method ORDER BY n DESC LIMIT ${limit}`
   ],
   [
+    "Escáneres que conocen MCP",
+    `${EV} SELECT path, http_method, rpc_method, client, as_org, substr(user_agent, 1, 80) AS user_agent, count(*) AS n
+     FROM ev
+     WHERE path LIKE '/.well-known/%' OR rpc_method IN ('server/discover', 'initialize')
+        OR (path = '/' AND http_method = 'POST') OR (path LIKE '%mcp%' AND path <> '/mcp')
+        OR (kind = 'mcp' AND rpc_method IS NULL)
+     GROUP BY path, http_method, rpc_method, client, as_org, user_agent ORDER BY n DESC LIMIT ${limit}`
+  ],
+  [
+    "User-Agents más frecuentes",
+    `${EV} SELECT substr(user_agent, 1, 100) AS user_agent, count(*) AS n, count(DISTINCT ip_hash) AS ips,
+       sum(kind = 'mcp') AS mcp, count(DISTINCT path) AS paths
+     FROM ev GROUP BY user_agent ORDER BY n DESC LIMIT ${limit}`
+  ],
+  [
     "Origen (país y red)",
     `${EV} SELECT country, as_org, count(*) AS n, count(DISTINCT ip_hash) AS ips FROM ev
      GROUP BY country, as_org ORDER BY n DESC LIMIT 20`

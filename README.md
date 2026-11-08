@@ -16,6 +16,7 @@ cliente MCP ──HTTPS──▶ Worker (mcp.cribalo.com)
                         ├─ cuerpo > 32 KiB → 413 (se registra como 'rejected')
                         ├─ /mcp  → createMcpHandler (agents) + McpServer (SDK v2), sin estado
                         ├─ /     → página que explica el servidor
+                        ├─ /dash/ → panel privado en directo (contraseña); no se registra
                         └─ resto → 404, se registra (escáneres)
                         │
                         └─ ctx.waitUntil → D1 'events' (una fila por mensaje JSON-RPC o petición)
@@ -63,6 +64,30 @@ Sin la sal `IP_SALT`, el campo vale `no-salt`: un hash de IPv4 sin sal se invier
 
 **Retención:** 90 días (`RETENTION_DAYS`). La purga corre a diario con un cron. Workers Logs
 está desactivado (`observability.enabled: false`), así que D1 es el único registro.
+
+## Panel en directo (`/dash/`)
+
+Panel privado para ver el registro casi en tiempo real: contadores, actividad por tipo, feed con
+filtro y búsqueda, detalle de cada evento, clientes MCP, herramientas con sus `purpose`,
+escáneres clasificados, User-Agents y origen. Ventanas de 1 h, 24 h y 7 días.
+
+- **Acceso:** una contraseña en el secreto `DASH_PASSWORD` (16 caracteres o más). Sin ese
+  secreto, `/dash/api/*` responde 404 y el panel no carga datos. El inicio de sesión deja una
+  cookie firmada con HMAC (`HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/dash`, 12 h). Cambiar
+  la contraseña invalida todas las sesiones.
+- **Seguridad:** todo lo que muestra el panel lo escribe quien llama, así que el HTML se monta solo
+  con `textContent` (la prueba `app.js has no HTML-injection sinks` lo vigila) y `public/_headers`
+  pone una CSP estricta (`script-src 'self'`, sin `unsafe-inline`), `frame-ancestors 'none'` y
+  `no-referrer`. Las peticiones a `/dash` no se guardan en D1.
+- **Lecturas de D1:** la carga inicial lee como mucho 5000 filas por el índice de `ts`, y luego
+  pide cada 5 s solo las filas nuevas (`id > último`); con la pestaña oculta, para. Queda muy por
+  debajo de los 5 M de lecturas diarias del plan Free.
+
+Para activarlo en producción:
+```bash
+npx wrangler secret put DASH_PASSWORD
+```
+Y en local, `DASH_PASSWORD=` en `.dev.vars`.
 
 ## Coste
 
@@ -112,9 +137,12 @@ npm run summary
 - el 413 por cuerpo grande y el 403 por Origin ajeno;
 - que las filas llegan a D1: `clientInfo`, `purpose` separado de `args` y `ip_hash` en hexadecimal.
 
+- el panel: CSP, 401 sin cookie o con contraseña mala, cookie con sus atributos, eventos en
+  orden, cookie manipulada rechazada, cierre de sesión y que `/dash` no llega a D1.
+
 `--rate-limit` añade la comprobación del 429.
 
-Resultado el 8 nov 2026: 12 de 12 pruebas pasan, y la purga del cron, probada con
+Resultado el 8 nov 2026: 19 de 19 pruebas pasan en local, y la purga del cron, probada con
 `/cdn-cgi/handler/scheduled`, borra una fila de 2020 y conserva las recientes.
 
 ## Desplegar

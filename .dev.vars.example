@@ -1,1 +1,2 @@
 IP_SALT=change-me-local-only
+DASH_PASSWORD=change-me-at-least-16-chars

@@ -14,6 +14,9 @@
   "routes": [{ "pattern": "mcp.cribalo.com", "zone_name": "cribalo.com", "custom_domain": true }],
   "workers_dev": false,
 
+  // Static dashboard under /dash/; anything that is not a file falls through to the Worker.
+  "assets": { "directory": "public", "html_handling": "auto-trailing-slash", "not_found_handling": "none" },
+
   "d1_databases": [
     {
       "binding": "DB",
@@ -38,5 +41,5 @@
     "MAX_FIELD_CHARS": "2000",
     "CONTACT": "contact@cribalo.com"
   }
-  // Secret (not here): IP_SALT  ->  `wrangler secret put IP_SALT`; locally in .dev.vars
+  // Secrets (not here): IP_SALT, DASH_PASSWORD (>= 16 chars)  ->  `wrangler secret put ...`; locally in .dev.vars
 }
