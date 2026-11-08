@@ -122,7 +122,7 @@
     return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
   }
   const SCAN_CATS = [
-    ["MCP/IA-aware", (p, e) => /^\/\.well-known\/(oauth|mcp)/i.test(p) || (e.http_method === "POST" && p === "/") || e.rpc_method === "server/discover" || (/mcp/i.test(p) && p !== "/mcp")],
+    ["MCP/IA-aware", (p, e) => /^\/\.well-known\/(oauth|mcp|agent)/i.test(p) || p === "/a2a" || (e.http_method === "POST" && p === "/") || e.rpc_method === "server/discover" || (/mcp/i.test(p) && p !== "/mcp")],
     ["secretos", (p) => /(\.env|\.git|\.ssh|\.npmrc|secrets|\.bash_history|credentials|server\.key|\.vscode|\.svn|_vti_pvt)/i.test(p)],
     ["backups/BD", (p) => /(\.sql|backup|dump|\.tar\.gz|\.zip)/i.test(p)],
     ["PHP/WordPress", (p) => /(wp-|\.php|phpinfo)/i.test(p)],
@@ -148,6 +148,7 @@
     renderFeed(list);
     renderClients(withC);
     renderTools(withC);
+    renderA2a(list);
     renderScanners(list);
     renderOrigin(list);
     renderUas(list);
@@ -157,6 +158,7 @@
     const items = [
       ["peticiones", list.length, "--text"], ["IPs distintas", ips, "--text"],
       ["mensajes MCP", list.filter((e) => e.kind === "mcp").length, "--mcp"],
+      ["mensajes A2A", list.filter((e) => e.kind === "a2a" && e.rpc_method).length, "--a2a"],
       ["llamadas a herramientas", list.filter((e) => e.tool).length, "--mcp"],
       ["purposes", list.filter((e) => e.purpose).length, "--aware"],
       ["escáneres", list.filter((e) => e.kind === "http").length, "--http"],
@@ -260,10 +262,30 @@
     if (!byTool.size) box.append(el("p", "empty", "Sin llamadas a herramientas."));
     fill("p-tools", box);
   }
+  function renderA2a(list) {
+    const xs = list.filter((e) => e.kind === "a2a");
+    const box = document.createDocumentFragment();
+    const cards = xs.filter((e) => e.note === "agent-card").length;
+    const sends = xs.filter((e) => e.rpc_method === "SendMessage" || e.rpc_method === "message/send");
+    const row = el("div", "tool-row");
+    row.append(el("b", null, "Agent Card"), el("span", "muted", cards + " lecturas"), el("b", null, "mensajes"), el("span", "muted", sends.length + " enviados · " + (xs.filter((e) => e.rpc_method).length - sends.length) + " otros métodos"));
+    box.append(row);
+    const quotes = el("div", "quotes");
+    sends.filter((e) => e.purpose).slice(-8).reverse().forEach((e) => {
+      const q = el("blockquote", "quote");
+      const who = [e.tool ? "skill " + e.tool : null, e.protocol_version ? "A2A " + e.protocol_version : "A2A 0.3 (sin cabecera)", clip(e.user_agent || "sin user-agent", 60), fmtDateTime(e.ts)].filter(Boolean).join(" · ");
+      q.append(el("span", null, "“" + clip(e.purpose, 240) + "”"), el("small", null, who));
+      quotes.append(q);
+    });
+    if (quotes.children.length) box.append(quotes);
+    else box.append(el("p", "empty", "Sin mensajes A2A."));
+    fill("p-a2a", box);
+  }
   function renderScanners(list) {
     const m = new Map();
     for (const e of list) {
       if (e.kind === "mcp" && e.rpc_method !== "server/discover") continue;
+      if (e.kind === "a2a" && e.note !== "agent-card") continue;
       const k = e.http_method + " " + e.path; let r = m.get(k);
       if (!r) { r = { key: k, n: 0, cat: category(e) }; m.set(k, r); } r.n++;
     }
@@ -302,11 +324,11 @@
     cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
     const ctx = cv.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.clearRect(0, 0, w, h);
     const end = Math.ceil(Date.now() / cfg.bucket) * cfg.bucket, n = Math.round(cfg.ms / cfg.bucket), start = end - n * cfg.bucket;
-    const buckets = Array.from({ length: n }, (_, i) => ({ t: start + i * cfg.bucket, mcp: 0, http: 0, rejected: 0 }));
+    const buckets = Array.from({ length: n }, (_, i) => ({ t: start + i * cfg.bucket, mcp: 0, a2a: 0, http: 0, rejected: 0 }));
     for (const e of list) { const i = Math.floor((Date.parse(e.ts) - start) / cfg.bucket); if (i >= 0 && i < n && buckets[i][e.kind] !== undefined) buckets[i][e.kind]++; }
-    const max = Math.max(1, ...buckets.map((b) => b.mcp + b.http + b.rejected));
+    const max = Math.max(1, ...buckets.map((b) => b.mcp + b.a2a + b.http + b.rejected));
     const L = 38, B = 20, T = 6, R = 6, cw = w - L - R, ch = h - B - T, bw = cw / n;
-    const colors = { mcp: cssVar("--mcp"), http: cssVar("--http"), rejected: cssVar("--rejected") };
+    const colors = { mcp: cssVar("--mcp"), a2a: cssVar("--a2a"), http: cssVar("--http"), rejected: cssVar("--rejected") };
     ctx.font = "11px " + cssVar("--mono"); ctx.fillStyle = cssVar("--muted"); ctx.strokeStyle = cssVar("--line");
     ctx.textAlign = "right"; ctx.textBaseline = "middle";
     for (let i = 0; i <= 4; i++) {
@@ -317,7 +339,7 @@
     const step = Math.max(1, Math.ceil(n / Math.max(2, Math.floor(cw / 70))));
     buckets.forEach((b, i) => {
       let y = T + ch;
-      for (const k of ["mcp", "http", "rejected"]) {
+      for (const k of ["mcp", "a2a", "http", "rejected"]) {
         const hh = (b[k] / max) * ch; if (!hh) continue;
         ctx.fillStyle = colors[k]; ctx.fillRect(L + i * bw + Math.min(1, bw * 0.1), y - hh, Math.max(1, bw - Math.min(2, bw * 0.2)), hh); y -= hh;
       }
@@ -333,7 +355,7 @@
     const r = $("chart").getBoundingClientRect(), i = Math.floor((ev.clientX - r.left - g.L) / g.bw), tip = $("tip");
     if (i < 0 || i >= g.n) { tip.hidden = true; return; }
     const b = chartState.buckets[i];
-    tip.replaceChildren(el("div", null, fmtDateTime(b.t)), el("div", null, "mcp " + b.mcp + " · http " + b.http + " · rejected " + b.rejected));
+    tip.replaceChildren(el("div", null, fmtDateTime(b.t)), el("div", null, "mcp " + b.mcp + " · a2a " + b.a2a + " · http " + b.http + " · rejected " + b.rejected));
     tip.hidden = false;
     tip.style.left = Math.min(ev.clientX - r.left + 12, g.w - tip.offsetWidth - 4) + "px"; tip.style.top = "8px";
   });
@@ -342,12 +364,12 @@
   window.matchMedia("(prefers-color-scheme: light)").addEventListener("change", () => render(true));
 
   // legend
-  [["mcp", "--mcp"], ["http", "--http"], ["rejected", "--rejected"]].forEach(([k, v]) => {
+  [["mcp", "--mcp"], ["a2a", "--a2a"], ["http", "--http"], ["rejected", "--rejected"]].forEach(([k, v]) => {
     const s = el("span"); const sw = el("span", "sw"); sw.style.background = "var(" + v + ")"; s.append(sw, document.createTextNode(k)); $("legend").append(s);
   });
 
   // ---- drawer ----
-  const FIELDS = ["id", "ts", "kind", "ip_hash", "country", "asn", "as_org", "user_agent", "http_method", "path", "status", "body_bytes", "protocol_version", "rpc_method", "rpc_id", "client_name", "client_version", "client_info", "capabilities", "tool", "args", "purpose", "note", "redactions"];
+  const FIELDS = ["id", "ts", "kind", "ip_hash", "country", "asn", "as_org", "user_agent", "http_method", "path", "status", "body_bytes", "protocol_version", "rpc_method", "rpc_id", "client_name", "client_version", "client_info", "capabilities", "tool", "args", "purpose", "note", "redactions", "context_id", "task_id"];
   function openDrawer(e) {
     $("drawer-id").textContent = "#" + e.id;
     const dl = el("dl");

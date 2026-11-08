@@ -15,6 +15,8 @@ cliente MCP ──HTTPS──▶ Worker (mcp.cribalo.com)
                         ├─ límite: 30 peticiones/60 s por IP con hash (binding ratelimits) → 429
                         ├─ cuerpo > 32 KiB → 413 (se registra como 'rejected')
                         ├─ /mcp  → createMcpHandler (agents) + McpServer (SDK v2), sin estado
+                        ├─ /.well-known/agent-card.json (y agent.json) → Agent Card A2A
+                        ├─ /a2a  → agente A2A señuelo, JSON-RPC sin estado (src/a2a.ts)
                         ├─ /     → página que explica el servidor
                         ├─ /dash/ → panel privado en directo (contraseña); no se registra
                         └─ resto → 404, se registra (escáneres)
@@ -46,7 +48,46 @@ cron diario 03:17 UTC ──▶ DELETE de filas con más de RETENTION_DAYS
 - **Origin:** el SDK rechaza (403) las peticiones de navegador desde otros dominios, para que
   ninguna web pueda usar el navegador de sus visitantes contra `/mcp`.
 
-## Qué se guarda (tabla `events`, `migrations/0001_init.sql` y `0002_capabilities_redactions.sql`)
+## Capa A2A (Agent2Agent)
+
+Segunda puerta del mismo señuelo, para agentes que **delegan tareas en otros agentes** en vez de
+llamar herramientas. Está en `src/a2a.ts`, en el mismo Worker, con el mismo límite por IP, el mismo
+tope de 32 KiB, la misma ocultación de secretos y la misma tabla.
+
+- **Versiones:** habla A2A **1.0** (especificación consultada el 8 nov 2026) y **0.3**, porque
+  muchos clientes siguen en 0.3. Sin cabecera `A2A-Version` se asume 0.3, como manda la 1.0. Los
+  métodos en PascalCase (`SendMessage`) se responden con la forma 1.0 aunque falte la cabecera.
+  Con otra versión, el error es `-32009`.
+- **Agent Card** en `/.well-known/agent-card.json`, y también en la ruta antigua
+  `/.well-known/agent.json`. Lleva los campos 1.0 (`supportedInterfaces`, con la 1.0 como
+  preferida) y los 0.3 (`url`, `preferredTransport`, `protocolVersion`). Tiene 6 *skills* que
+  replican las herramientas MCP. La descripción y cada *skill* dicen que se registra y que no se
+  ejecuta nada. Se sirve con `access-control-allow-origin: *` porque es pública.
+- **`/a2a`** (POST y JSON-RPC 2.0):
+
+  | Método (1.0 / 0.3) | Respuesta |
+  |---|---|
+  | `SendMessage` / `message/send` | tarea `COMPLETED` / `completed` con un *artifact* de texto sintético fijo |
+  | `GetTask`, `CancelTask`, `SubscribeToTask` (y sus nombres 0.3) | `-32001` TaskNotFound, porque no se guarda ninguna tarea |
+  | `SendStreamingMessage` / `message/stream`, `ListTasks` | `-32004` Unsupported (la card declara `streaming: false`) |
+  | métodos de *push notifications* | `-32003` |
+  | `GetExtendedAgentCard` | `-32007` |
+
+- **Navegadores:** `/a2a` exige `Content-Type` `application/json` o `application/a2a+json` (si no,
+  responde 415) y no contesta a los *preflight* CORS. Así, ninguna web puede usar el navegador de
+  sus visitantes contra `/a2a`. GET responde 405.
+- **Registro** (`kind = 'a2a'`):
+  - `purpose` guarda **el texto del mensaje**, porque en A2A el texto es la intención.
+  - `tool` guarda el *skill* si viene en `metadata.skillId`, `skill_id` o `skill`.
+  - `context_id` y `task_id` (migración `0003_a2a.sql`) permiten seguir conversaciones.
+  - `args` guarda el resto de `params`, con los textos y los bytes de ficheros sustituidos por su tamaño.
+  - `protocol_version` guarda la cabecera `A2A-Version` (`NULL` = 0.3).
+  - Las lecturas de la Agent Card se guardan con `note = 'agent-card'`.
+- **Panel y resumen:** el panel tiene el filtro `a2a`, el contador «mensajes A2A», una serie en la
+  gráfica y la tarjeta «Mensajes A2A». `npm run summary` añade **Embudo A2A** (card → envío →
+  varios turnos), **Métodos A2A y versión** y **Mensajes A2A**.
+
+## Qué se guarda (tabla `events`, `migrations/0001_init.sql`, `0002_capabilities_redactions.sql` y `0003_a2a.sql`)
 
 | Campo | Contenido |
 |---|---|
@@ -58,6 +99,7 @@ cron diario 03:17 UTC ──▶ DELETE de filas con más de RETENTION_DAYS
 | `client_name`, `client_version`, `client_info` | `clientInfo` |
 | `capabilities` | `capabilities` que el cliente declara en `initialize` (JSON recortado; `NULL` en el resto) |
 | `tool`, `args`, `purpose` | herramienta, argumentos sin `purpose` y `purpose` aparte |
+| `context_id`, `task_id` | solo en A2A: identificadores de conversación y tarea que manda el cliente |
 | `redactions` | tipos de dato ocultados en esa fila, sin repetir, ordenados y separados por comas (`NULL` si ninguno) |
 
 Límites: `MAX_FIELD_CHARS` (2000) para argumentos, `purpose` y `clientInfo`, y 500 para el
@@ -192,6 +234,16 @@ o `sk-short` no se ocultan) y el tiempo con entradas adversas de 32 KiB.
   orden, cookie manipulada rechazada, cierre de sesión y que `/dash` no llega a D1.
 
 `--rate-limit` añade la comprobación del 429.
+
+`npm run test:a2a` (`scripts/a2a-test.mjs`) usa el SDK oficial `@a2a-js/sdk` en dos versiones: la
+1.3.0, como cliente A2A 1.0, y la 0.3.14 (alias `a2a-sdk-v03`), como cliente 0.3. Comprueba la
+Agent Card en sus dos rutas, el `SendMessage` 1.0 y el `message/send` 0.3 con tarea completada
+sintética, `GetTask` → TaskNotFound, los errores `-32004`, `-32601`, `-32009`, `-32602` y
+`-32700`, el 405 y el 415, que no se concede CORS, y las filas en D1: texto en `purpose`, *skill*,
+`context_id` y una clave `sk-ant-…` y `/home/alice` ocultadas. En local, `wrangler dev` reescribe
+el Host al de la ruta, así que la card anuncia `https://mcp.cribalo.com/a2a`; la prueba redirige
+esa URL al servidor local. Las dos suites seguidas superan las 30 peticiones/min: deja un minuto
+entre ellas.
 
 Resultado el 8 nov 2026: 21 de 21 pruebas pasan en local, y la purga del cron, probada con
 `/cdn-cgi/handler/scheduled`, borra una fila de 2020 y conserva las recientes.

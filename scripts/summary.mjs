@@ -79,15 +79,34 @@ const sections = [
      GROUP BY client, capabilities ORDER BY n DESC LIMIT ${limit}`
   ],
   [
+    "Embudo A2A (visitante = ip_hash + user_agent)",
+    `${EV}, v AS (SELECT ip_hash, user_agent, max(note = 'agent-card') AS card,
+       max(rpc_method IN ('SendMessage', 'message/send')) AS send, count(DISTINCT context_id) AS contexts,
+       sum(rpc_method IN ('SendMessage', 'message/send')) AS msgs FROM ev WHERE kind = 'a2a' GROUP BY ip_hash, user_agent)
+     SELECT count(*) AS visitantes, sum(card) AS agent_card, sum(send) AS send_message, sum(card AND send) AS card_y_send,
+       sum(msgs) AS mensajes, sum(msgs > 1) AS varios_turnos FROM v`
+  ],
+  [
+    "Métodos A2A y versión",
+    `${EV} SELECT coalesce(rpc_method, note) AS metodo, coalesce(protocol_version, '(sin cabecera = 0.3)') AS a2a_version,
+       count(*) AS n, count(DISTINCT ip_hash) AS ips, group_concat(DISTINCT substr(note, 1, 40)) AS notas
+     FROM ev WHERE kind = 'a2a' GROUP BY metodo, a2a_version ORDER BY n DESC LIMIT ${limit}`
+  ],
+  [
+    "Mensajes A2A (texto = purpose)",
+    `${EV} SELECT tool AS skill, substr(purpose, 1, 120) AS mensaje, substr(user_agent, 1, 60) AS user_agent, as_org, count(*) AS n
+     FROM ev WHERE kind = 'a2a' AND purpose IS NOT NULL GROUP BY skill, mensaje, user_agent, as_org ORDER BY n DESC LIMIT ${limit}`
+  ],
+  [
     "Rutas no MCP (escáneres)",
     `${EV} SELECT path, http_method, count(*) AS n, count(DISTINCT ip_hash) AS ips, count(DISTINCT user_agent) AS uas
-     FROM ev WHERE kind <> 'mcp' GROUP BY path, http_method ORDER BY n DESC LIMIT ${limit}`
+     FROM ev WHERE kind NOT IN ('mcp', 'a2a') GROUP BY path, http_method ORDER BY n DESC LIMIT ${limit}`
   ],
   [
     "Escáneres que conocen MCP",
     `${EV} SELECT path, http_method, rpc_method, client AS cliente_declarado, as_org, substr(user_agent, 1, 80) AS user_agent, count(*) AS n
      FROM ev
-     WHERE path LIKE '/.well-known/%' OR rpc_method IN ('server/discover', 'initialize')
+     WHERE path LIKE '/.well-known/%' OR path = '/a2a' OR rpc_method IN ('server/discover', 'initialize')
         OR (path = '/' AND http_method = 'POST') OR (path LIKE '%mcp%' AND path <> '/mcp')
         OR (kind = 'mcp' AND rpc_method IS NULL)
      GROUP BY path, http_method, rpc_method, client, as_org, user_agent ORDER BY n DESC LIMIT ${limit}`
@@ -95,7 +114,7 @@ const sections = [
   [
     "User-Agents más frecuentes",
     `${EV} SELECT substr(user_agent, 1, 100) AS user_agent, count(*) AS n, count(DISTINCT ip_hash) AS ips,
-       sum(kind = 'mcp') AS mcp, count(DISTINCT path) AS paths
+       sum(kind = 'mcp') AS mcp, sum(kind = 'a2a') AS a2a, count(DISTINCT path) AS paths
      FROM ev GROUP BY user_agent ORDER BY n DESC LIMIT ${limit}`
   ],
   [

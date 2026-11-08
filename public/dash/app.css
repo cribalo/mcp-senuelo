@@ -1,6 +1,6 @@
 :root {
   --bg: #070b11; --bg2: #0d141d; --panel: #0f1822; --line: #1c2937; --text: #d5e1ec; --muted: #7d90a3;
-  --mcp: #22d3c5; --http: #f5a524; --rejected: #ff4d5e; --aware: #a78bfa;
+  --mcp: #22d3c5; --http: #f5a524; --rejected: #ff4d5e; --aware: #a78bfa; --a2a: #60a5fa;
   --flash: rgba(34, 211, 197, .22); --shadow: 0 8px 30px rgba(0,0,0,.5);
   --mono: ui-monospace, SFMono-Regular, Menlo, monospace;
   --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -8,7 +8,7 @@
 @media (prefers-color-scheme: light) {
   :root {
     --bg: #f1f4f8; --bg2: #e6ebf1; --panel: #ffffff; --line: #d3dbe4; --text: #16222e; --muted: #5d6f81;
-    --mcp: #0b9a8f; --http: #c77a00; --rejected: #d4233a; --aware: #7048d8;
+    --mcp: #0b9a8f; --http: #c77a00; --rejected: #d4233a; --aware: #7048d8; --a2a: #2563eb;
     --flash: rgba(11, 154, 143, .2); --shadow: 0 8px 30px rgba(20,40,60,.18);
   }
 }
@@ -59,7 +59,7 @@ td.num { text-align: right; }
 .feed tr.new td { animation: flash 1.4s ease-out; }
 @keyframes flash { from { background: var(--flash); } to { background: transparent; } }
 .chip { display: inline-block; padding: 0 .45rem; border-radius: 999px; font-size: .72rem; border: 1px solid var(--c); color: var(--c); }
-.chip.mcp { --c: var(--mcp); } .chip.http { --c: var(--http); } .chip.rejected { --c: var(--rejected); } .chip.aware { --c: var(--aware); }
+.chip.mcp { --c: var(--mcp); } .chip.http { --c: var(--http); } .chip.rejected { --c: var(--rejected); } .chip.aware { --c: var(--aware); } .chip.a2a { --c: var(--a2a); }
 .bar { display: grid; grid-template-columns: minmax(80px, 40%) 1fr auto; gap: .5rem; align-items: center; font-size: .8rem; margin: .2rem 0; }
 .bar .lbl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bar .track { background: var(--bg); height: .55rem; border-radius: 3px; overflow: hidden; } .bar .fill { display: block; height: 100%; background: var(--mcp); }

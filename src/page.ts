@@ -22,12 +22,16 @@ export function renderHome(contact: string, retentionDays: number): string {
 <a href="https://modelcontextprotocol.io/">MCP</a> público, en <code>/mcp</code>, cuyas herramientas
 son falsas: no ejecutan nada, no acceden a Internet y no dan acceso a ningún dato real. Sirve para
 estudiar qué clientes y agentes de IA se conectan a servidores MCP abiertos y para qué dicen venir.</p>
+<p>También hay un agente <a href="https://a2a-protocol.org/">A2A</a> (Agent2Agent) igual de falso:
+su descripción está en <code>/.well-known/agent-card.json</code> y recibe mensajes en <code>/a2a</code>.
+Responde siempre con un texto sintético que lo dice y no ejecuta nada.</p>
 
 <h2>Qué se registra</h2>
 <ul>
   <li>Hora, país y red (ASN) según Cloudflare, y un <em>hash</em> con sal secreta de la IP (la IP en claro no se guarda).</li>
   <li>User-Agent, versión del protocolo y la información del cliente que este envía (<code>clientInfo</code>).</li>
   <li>Métodos MCP, herramienta llamada, sus argumentos (recortados) y el campo <code>purpose</code>.</li>
+  <li>En A2A: método, versión del protocolo, el texto de cada mensaje (recortado), el <em>skill</em> pedido y los identificadores de conversación y tarea.</li>
   <li>También las peticiones a cualquier otra ruta de este dominio (método, ruta sin parámetros, User-Agent).</li>
 </ul>
 <p>Los registros se borran a los ${retentionDays} días. No se usan para identificar a nadie. Antes de guardarse,
@@ -47,10 +51,10 @@ para localizar tus registros indica tu IP y la hora aproximada. Puedes reclamar 
 ${contactLine}
 
 <h2 lang="en">In English</h2>
-<p lang="en"><strong>This is a research honeypot.</strong> The MCP endpoint at <code>/mcp</code> exposes fake,
-harmless tools: nothing is executed, no outbound requests are made and no real data exists. Every call is
+<p lang="en"><strong>This is a research honeypot.</strong> The MCP endpoint at <code>/mcp</code> and the A2A agent at
+<code>/a2a</code> (card at <code>/.well-known/agent-card.json</code>) are fake and harmless: nothing is executed, no outbound requests are made and no real data exists. Every call is
 logged (time, Cloudflare country and ASN, salted hash of the IP, User-Agent, clientInfo, methods, tool,
-truncated arguments and the <code>purpose</code> field) and kept for ${retentionDays} days, to study which MCP clients
+truncated arguments and the <code>purpose</code> field; for A2A, the method, protocol version, truncated message text, requested skill and context/task ids) and kept for ${retentionDays} days, to study which MCP clients
 and agents connect to open servers and why. Requests to any other path are logged too.
 Obvious secrets and personal data (API keys and tokens, email addresses, user names in file paths, card numbers,
 IBANs) are replaced by <code>[REDACTED:…]</code> before anything is stored. Aggregated results may be published

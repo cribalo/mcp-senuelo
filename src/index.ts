@@ -3,36 +3,13 @@ import { createServer } from "./tools";
 import { renderHome } from "./page";
 import { handleDash } from "./dash";
 import { redact } from "./redact";
-
-type Row = {
-  kind: "mcp" | "http" | "rejected";
-  ip_hash: string;
-  country: string | null;
-  asn: number | null;
-  as_org: string | null;
-  user_agent: string | null;
-  http_method: string;
-  path: string;
-  status: number | null;
-  body_bytes: number;
-  protocol_version: string | null;
-  rpc_method: string | null;
-  rpc_id: string | null;
-  client_name: string | null;
-  client_version: string | null;
-  client_info: string | null;
-  capabilities: string | null;
-  tool: string | null;
-  args: string | null;
-  purpose: string | null;
-  note: string | null;
-  redactions: string | null;
-};
+import { A2A_PATH, CARD_PATHS, cardResponse, handleA2a } from "./a2a";
+import { Row, asString, truncate, truncateOrNull, cleanOrNull, joinKinds } from "./log";
 
 const COLUMNS = [
   "ts", "kind", "ip_hash", "country", "asn", "as_org", "user_agent", "http_method", "path", "status",
   "body_bytes", "protocol_version", "rpc_method", "rpc_id", "client_name", "client_version",
-  "client_info", "tool", "args", "purpose", "note", "capabilities", "redactions"
+  "client_info", "tool", "args", "purpose", "note", "capabilities", "redactions", "context_id", "task_id"
 ] as const;
 const INSERT_SQL = `INSERT INTO events (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")})`;
 
@@ -105,7 +82,21 @@ export default {
       return response;
     }
 
+    if (url.pathname === A2A_PATH) {
+      const { response, rows } = handleA2a(request, url, body, base, maxField);
+      log(rows);
+      return response;
+    }
+
     let response: Response;
+    if (CARD_PATHS.has(url.pathname)) {
+      // Logged as 'a2a' so card fetches show up in the A2A funnel.
+      // The public host is always served over HTTPS; elsewhere (workers.dev, tests) use the request's origin.
+      const origin = url.hostname === env.PUBLIC_HOSTNAME ? `https://${env.PUBLIC_HOSTNAME}` : url.origin;
+      response = cardResponse(origin, request.method);
+      log([{ ...base, kind: "a2a", status: response.status, note: "agent-card" }]);
+      return response;
+    }
     if (url.pathname === "/" && (request.method === "GET" || request.method === "HEAD")) {
       response = new Response(renderHome(env.CONTACT, Number(env.RETENTION_DAYS) || 90), {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
@@ -152,7 +143,9 @@ function baseRow(request: Request, url: URL, ipHash: string): Row {
     args: null,
     purpose: null,
     note: null,
-    redactions: null
+    redactions: null,
+    context_id: null,
+    task_id: null
   };
 }
 
@@ -257,21 +250,4 @@ async function hashIp(ip: string, salt: string | undefined): Promise<string> {
   );
   const sig = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(ip)));
   return [...sig.slice(0, 8)].map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-function asString(v: unknown): string | null {
-  return typeof v === "string" ? v : null;
-}
-function truncate(s: string, n: number): string {
-  return s.length > n ? s.slice(0, n) + "…" : s;
-}
-function truncateOrNull(s: string | null | undefined, n: number): string | null {
-  return s == null ? null : truncate(s, n);
-}
-
-function cleanOrNull(s: string | null, clean: (v: string) => string): string | null {
-  return s == null ? null : clean(s);
-}
-function joinKinds(kinds: string[]): string | null {
-  return kinds.length ? [...kinds].sort().join(",") : null;
 }
