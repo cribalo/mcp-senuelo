@@ -109,6 +109,7 @@ await check("/stats.json publishes totals only and is not logged", async () => {
     assert.equal(typeof j.totals[k], "number", k);
   }
   assert.ok(j.definitions.visitor);
+  assert.match(j.definitions.scope, /own test traffic/, "says that our tests are left out");
   const text = JSON.stringify(j);
   assert.doesNotMatch(text, /ip_hash|user_agent|"args"/, "no per-request fields");
   const rows = JSON.parse(execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command",

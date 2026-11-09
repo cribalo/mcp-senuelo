@@ -7,7 +7,15 @@ const CACHE_KEY = "https://stats.internal/mcp-senuelo/v1";
 const VISITOR = "ip_hash || '|' || COALESCE(user_agent, '')";
 const A2A_SEND = "('SendMessage','message/send','SendStreamingMessage','message/stream')";
 
-const SQL = `SELECT
+// Our own tests, by the rules in METRICAS.md: User-Agent `node` or `senuelo-*`, or a purpose or client
+// version that starts with `test-`. A visitor with any such row is left out entirely, and so is a canary
+// visit to a link that was issued to one of those visitors.
+const OWN_ROW = `(COALESCE(user_agent, '') = 'node' OR COALESCE(user_agent, '') LIKE 'senuelo-%'
+  OR COALESCE(purpose, '') LIKE 'test-%' OR COALESCE(client_version, '') LIKE 'test-%')`;
+
+const SQL = `WITH own AS (SELECT DISTINCT ${VISITOR} AS v FROM events WHERE ${OWN_ROW}),
+e AS (SELECT * FROM events WHERE kind <> 'rejected' AND ${VISITOR} NOT IN (SELECT v FROM own))
+SELECT
   MIN(ts) AS since,
   MAX(ts) AS last_event,
   COUNT(*) AS requests,
@@ -19,8 +27,10 @@ const SQL = `SELECT
   SUM(rpc_method = 'tools/call' AND purpose IS NOT NULL AND TRIM(purpose) <> '') AS tool_calls_with_purpose,
   COUNT(DISTINCT CASE WHEN kind = 'a2a' THEN ${VISITOR} END) AS a2a_visitors,
   SUM(kind = 'a2a' AND rpc_method IN ${A2A_SEND} AND purpose IS NOT NULL) AS a2a_messages,
-  COUNT(DISTINCT CASE WHEN note = 'canary-hit' THEN path END) AS canary_links_followed
-FROM events WHERE kind <> 'rejected'`;
+  COUNT(DISTINCT CASE WHEN note = 'canary-hit' AND NOT EXISTS (
+    SELECT 1 FROM events i WHERE i.note LIKE '%canary:' || substr(e.path, 4, 12) || '%'
+      AND i.ip_hash || '|' || COALESCE(i.user_agent, '') IN (SELECT v FROM own)) THEN path END) AS canary_links_followed
+FROM e`;
 
 export type Stats = {
   source: string;
@@ -33,6 +43,8 @@ export type Stats = {
 };
 
 const DEFINITIONS: Record<string, string> = {
+  scope: "all figures leave out our own test traffic: any visitor with a request whose User-Agent is 'node' or " +
+    "starts with 'senuelo-', or whose purpose or client version starts with 'test-', plus visits to canary links issued to them",
   visitor: "one (hashed IP address, User-Agent) pair",
   mcp_clients: "distinct MCP clientInfo.name values declared in initialize",
   tool_visitors: "visitors that called tools/call at least once, with any arguments",
