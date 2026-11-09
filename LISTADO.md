@@ -42,4 +42,4 @@ titular.
   Al dar un alta, anotar la fecha en esta tabla y en el registro de cambios de `METRICAS.md`.
 - **Categoría o etiquetas:** research, testing, security research. No usar «productivity», «database»
   ni nada que sugiera utilidad real.
-- **Repositorio:** ninguno público por ahora. Si se publica el código, enlazarlo aquí.
+- **Repositorio:** https://github.com/cribalo/mcp-senuelo (público desde el 9 nov 2026, sin licencia: todos los derechos reservados).
