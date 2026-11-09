@@ -10,6 +10,14 @@ import assert from "node:assert/strict";
 const base = process.argv.find((a) => a.startsWith("http")) ?? "http://127.0.0.1:8787";
 const d1Where = /^http:\/\/(127\.0\.0\.1|localhost)/.test(base) ? "--local" : "--remote";
 const runId = `a2a-test-${Date.now()}`;
+// Every request this suite sends says it is ours (User-Agent `senuelo-*`), so /stats.json and the
+// report leave it out (METRICAS.md). Node's default User-Agent, `node`, is also used by third parties.
+const baseFetch = globalThis.fetch;
+globalThis.fetch = (input, init = {}) => {
+  const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
+  if (!headers.has("user-agent")) headers.set("user-agent", `senuelo-a2a-test/${runId}`);
+  return baseFetch(input, { ...init, headers });
+};
 let passed = 0;
 async function check(name, fn) {
   try {

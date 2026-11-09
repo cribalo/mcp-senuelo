@@ -7,10 +7,11 @@ const CACHE_KEY = "https://stats.internal/mcp-senuelo/v1";
 const VISITOR = "ip_hash || '|' || COALESCE(user_agent, '')";
 const A2A_SEND = "('SendMessage','message/send','SendStreamingMessage','message/stream')";
 
-// Our own tests, by the rules in METRICAS.md: User-Agent `node` or `senuelo-*`, or a purpose or client
-// version that starts with `test-`. A visitor with any such row is left out entirely, and so is a canary
-// visit to a link that was issued to one of those visitors.
-const OWN_ROW = `(COALESCE(user_agent, '') = 'node' OR COALESCE(user_agent, '') LIKE 'senuelo-%'
+// Our own tests, by the rules in METRICAS.md: User-Agent `senuelo-*`, or a purpose or client version that
+// starts with `test-`. A visitor with any such row is left out entirely, and so is a canary visit to a link
+// that was issued to one of those visitors. User-Agent `node` alone is not a rule: it is Node's default and
+// third-party crawlers (glama and others) send it too.
+const OWN_ROW = `(COALESCE(user_agent, '') LIKE 'senuelo-%'
   OR COALESCE(purpose, '') LIKE 'test-%' OR COALESCE(client_version, '') LIKE 'test-%')`;
 
 const SQL = `WITH own AS (SELECT DISTINCT ${VISITOR} AS v FROM events WHERE ${OWN_ROW}),
@@ -43,8 +44,8 @@ export type Stats = {
 };
 
 const DEFINITIONS: Record<string, string> = {
-  scope: "all figures leave out our own test traffic: any visitor with a request whose User-Agent is 'node' or " +
-    "starts with 'senuelo-', or whose purpose or client version starts with 'test-', plus visits to canary links issued to them",
+  scope: "all figures leave out our own test traffic: any visitor with a request whose User-Agent starts with " +
+    "'senuelo-', or whose purpose or client version starts with 'test-', plus visits to canary links issued to them",
   visitor: "one (hashed IP address, User-Agent) pair",
   mcp_clients: "distinct MCP clientInfo.name values declared in initialize",
   tool_visitors: "visitors that called tools/call at least once, with any arguments",

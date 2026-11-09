@@ -15,8 +15,9 @@ se anota al final con fecha y motivo, y lo afectado pasa a exploratorio. El info
 - **Cliente declarado:** `clientInfo.name` tal cual lo manda el cliente (o heredado del último
   `initialize` del mismo visitante). Es una declaración, no una identificación: el informe dice
   siempre «declarado».
-- **Fuera:** las filas de nuestras pruebas (UA `node`, `senuelo-*`, `purpose` o versión que empiezan
-  por `test-`) y las peticiones a `/dash`, que no se registran.
+- **Fuera:** las filas de nuestras pruebas (UA `senuelo-*`, `purpose` o versión que empiezan por
+  `test-`) y las peticiones a `/dash`, que no se registran. El UA `node` dejó de ser regla el 9 nov 2026
+  (ver el registro de cambios).
 
 ## Preguntas y métricas confirmatorias
 
@@ -69,3 +70,11 @@ Sesiones (duración, peticiones por sesión), orden de los métodos, tiempo hast
   que lo copian entran todos por `/mcp` y no se pueden separar.
 - 9 nov 2026: solicitud de alta en API Tracker (`/mcp/apitracker`), pendiente de revisión editorial.
   Si la aprueban, se anota aquí la fecha de publicación.
+- 9 nov 2026: se quita el UA `node` de la regla que deja fuera nuestras pruebas. Es el User-Agent que
+  Node pone por defecto, y en producción lo envían también clientes de terceros. Una consulta a D1 encontró
+  13 clientes declarados ajenos: glama, AgentsJunction health checker (4 IPs), securemyagent-registry,
+  codexguild-catalog-review, sourceweft, canopii-scanner y otros. La regla los habría sacado del análisis,
+  sobre todo de M3. Nuestras pruebas siguen fuera por `senuelo-*` y `test-`. Desde esta fecha,
+  `scripts/test-client.mjs` y `scripts/a2a-test.mjs` mandan siempre un UA `senuelo-*`. No se había publicado
+  ninguna cifra confirmatoria, así que no cambia nada publicado. `/stats.json` aplicó la regla antigua
+  unas horas del 9 nov.

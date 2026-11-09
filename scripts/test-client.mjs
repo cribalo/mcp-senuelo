@@ -9,6 +9,14 @@ const base = process.argv.find((a) => a.startsWith("http")) ?? "http://127.0.0.1
 const testRateLimit = process.argv.includes("--rate-limit");
 const d1Where = /^http:\/\/(127\.0\.0\.1|localhost)/.test(base) ? "--local" : "--remote";
 const runId = `test-${Date.now()}`;
+// Every request this suite sends says it is ours (User-Agent `senuelo-*`), so /stats.json and the
+// report leave it out (METRICAS.md). Node's default User-Agent, `node`, is also used by third parties.
+const baseFetch = globalThis.fetch;
+globalThis.fetch = (input, init = {}) => {
+  const headers = new Headers(init.headers ?? (input instanceof Request ? input.headers : undefined));
+  if (!headers.has("user-agent")) headers.set("user-agent", `senuelo-test-client/${runId}`);
+  return baseFetch(input, { ...init, headers });
+};
 // Read-only checks send their own cf-connecting-ip: under `wrangler dev` it picks a separate rate-limit
 // bucket, so the suite stays under 30 requests per minute (Cloudflare overwrites it in production).
 const OWN_BUCKET = { headers: { "cf-connecting-ip": "192.0.2.80" } };

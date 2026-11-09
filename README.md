@@ -207,10 +207,12 @@ está desactivado (`observability.enabled: false`), así que D1 es el único reg
 visitantes MCP, clientes MCP distintos, visitantes que llamaron a herramientas, llamadas, llamadas
 con `purpose`, visitantes y mensajes A2A, y enlaces canario visitados, cada uno con su definición.
 Las cifras **no cuentan nuestras propias pruebas**. Se aplican las reglas de METRICAS.md: queda
-fuera todo visitante con alguna petición cuyo User-Agent sea `node` o empiece por `senuelo-`, o cuyo
-`purpose` o versión de cliente empiece por `test-`. También quedan fuera las visitas a enlaces canario
-emitidos para esos visitantes. La definición `scope` de la propia respuesta lo explica. Una prueba
-manual sin esas marcas (por ejemplo, con `curl`) sí cuenta. No incluye hashes de IP, User-Agents, argumentos ni textos. Se calcula como mucho cada 5 minutos
+fuera todo visitante con alguna petición cuyo User-Agent empiece por `senuelo-`, o cuyo `purpose` o
+versión de cliente empiece por `test-`. También quedan fuera las visitas a enlaces canario emitidos
+para esos visitantes. La definición `scope` de la propia respuesta lo explica. Los tests
+(`npm test`, `npm run test:a2a`) mandan siempre un User-Agent `senuelo-*`. El User-Agent `node` no es
+regla, porque también lo usan crawlers de terceros. Una prueba manual sin esas marcas (por ejemplo,
+con `curl`) sí cuenta. No incluye hashes de IP, User-Agents, argumentos ni textos. Se calcula como mucho cada 5 minutos
 por centro de datos (Cache API) y sus peticiones no se registran. criba.cribalo.com lo lee por un
 *service binding* para sus cifras en vivo.
 
