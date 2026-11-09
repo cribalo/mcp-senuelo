@@ -6,8 +6,14 @@ export function renderHome(contact: string, retentionDays: number): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="robots" content="noindex">
-<title>Research MCP server</title>
+<title>Open MCP and A2A research honeypot — Cribalo</title>
+<meta name="description" content="A public, declared research decoy: an open MCP server and A2A agent with fake, harmless tools, used to study which AI clients and agents connect and what they ask for.">
+<link rel="canonical" href="https://mcp.cribalo.com/">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://mcp.cribalo.com/">
+<meta property="og:title" content="Open MCP and A2A research honeypot">
+<meta property="og:description" content="Which AI agents connect to an open MCP server, and what do they say they want? A declared research decoy with fake tools.">
+<meta name="twitter:card" content="summary">
 <style>
   body { font: 16px/1.55 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; color: #1d1d1f; background: #fff; }
   code { background: #f2f2f2; padding: .1em .3em; border-radius: 3px; }

@@ -122,7 +122,7 @@
     return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
   }
   const SCAN_CATS = [
-    ["MCP/IA-aware", (p, e) => /^\/\.well-known\/(oauth|mcp|agent)/i.test(p) || p === "/a2a" || (e.http_method === "POST" && p === "/") || e.rpc_method === "server/discover" || (/mcp/i.test(p) && p !== "/mcp")],
+    ["MCP/IA-aware", (p, e) => /^\/\.well-known\/(oauth|mcp|agent)/i.test(p) || p === "/a2a" || (e.http_method === "POST" && p === "/") || e.rpc_method === "server/discover" || (/mcp/i.test(p) && p !== "/mcp" && e.kind !== "mcp")],
     ["secretos", (p) => /(\.env|\.git|\.ssh|\.npmrc|secrets|\.bash_history|credentials|server\.key|\.vscode|\.svn|_vti_pvt)/i.test(p)],
     ["backups/BD", (p) => /(\.sql|backup|dump|\.tar\.gz|\.zip)/i.test(p)],
     ["PHP/WordPress", (p) => /(wp-|\.php|phpinfo)/i.test(p)],

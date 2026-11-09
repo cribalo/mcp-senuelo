@@ -9,6 +9,9 @@ const base = process.argv.find((a) => a.startsWith("http")) ?? "http://127.0.0.1
 const testRateLimit = process.argv.includes("--rate-limit");
 const d1Where = /^http:\/\/(127\.0\.0\.1|localhost)/.test(base) ? "--local" : "--remote";
 const runId = `test-${Date.now()}`;
+// Read-only checks send their own cf-connecting-ip: under `wrangler dev` it picks a separate rate-limit
+// bucket, so the suite stays under 30 requests per minute (Cloudflare overwrites it in production).
+const OWN_BUCKET = { headers: { "cf-connecting-ip": "192.0.2.80" } };
 let passed = 0;
 async function check(name, fn) {
   try {
@@ -32,6 +35,8 @@ await check("GET / explains the server", async () => {
   assert.match(html, /REDACTED/);
   assert.match(html, /lang="es">En español/);
   assert.match(html, /never shared or sold/);
+  assert.doesNotMatch(html, /noindex/, "the home page must be indexable");
+  assert.match(html, /<meta name="description"/);
 });
 
 await check("unknown path is 404 and logged", async () => {
@@ -87,7 +92,7 @@ await check("canary: visiting the link is logged; a client cannot pick its own l
 });
 
 await check("/llms.txt describes the decoy", async () => {
-  const res = await fetch(base + "/llms.txt");
+  const res = await fetch(base + "/llms.txt", OWN_BUCKET);
   assert.equal(res.status, 200);
   const t = await res.text();
   assert.match(t, /research decoy/);
@@ -96,7 +101,7 @@ await check("/llms.txt describes the decoy", async () => {
 });
 
 await check("/stats.json publishes totals only and is not logged", async () => {
-  const res = await fetch(base + "/stats.json?" + runId);
+  const res = await fetch(base + "/stats.json?" + runId, OWN_BUCKET);
   assert.equal(res.status, 200);
   assert.equal(res.headers.get("access-control-allow-origin"), "*");
   const j = await res.json();
@@ -309,6 +314,32 @@ await check("/dash requests are not in D1", async () => {
 await check("app.js has no HTML-injection sinks", async () => {
   const js = readFileSync(new URL("../public/dash/app.js", import.meta.url), "utf8");
   assert.doesNotMatch(js, /innerHTML|insertAdjacentHTML|outerHTML|document\.write|eval\(|new Function/);
+});
+
+await check("search engines: robots with sitemap, sitemap without canary links, IndexNow key", async () => {
+  const robots = await (await fetch(base + "/robots.txt", OWN_BUCKET)).text();
+  assert.match(robots, /^Sitemap: https?:\/\/\S+\/sitemap\.xml$/m);
+  const res = await fetch(base + "/sitemap.xml", OWN_BUCKET);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get("content-type"), /xml/);
+  const xml = await res.text();
+  assert.match(xml, /<loc>https?:\/\/[^<]+\/<\/loc>/);
+  assert.doesNotMatch(xml, /\/c\//);
+  const key = /INDEXNOW_KEY = "([0-9a-f]{32})"/.exec(readFileSync(new URL("../src/index.ts", import.meta.url), "utf8"))[1];
+  assert.equal(await (await fetch(`${base}/${key}.txt`, OWN_BUCKET)).text(), key);
+});
+
+await check("directory entry /mcp/apitracker serves the same server and logs its path; unknown /mcp/x is 404", async () => {
+  const own = { "cf-connecting-ip": "192.0.2.81" };
+  const client = new Client({ name: `${runId}-entry`, version: "0.0.1" });
+  await client.connect(new StreamableHTTPClientTransport(new URL(base + "/mcp/apitracker"), { requestInit: { headers: own } }));
+  assert.equal((await client.listTools()).tools.length, 6);
+  await client.close();
+  assert.equal((await fetch(base + "/mcp/not-a-directory", { headers: own })).status, 404);
+  await new Promise((r) => setTimeout(r, d1Where === "--local" ? 500 : 3000));
+  const rows = JSON.parse(execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command",
+    `SELECT path, kind, rpc_method FROM events WHERE client_name = '${runId}-entry'`], { encoding: "utf8" }))[0].results;
+  assert.ok(rows.length > 0 && rows.every((r) => r.path === "/mcp/apitracker" && r.kind === "mcp"), JSON.stringify(rows));
 });
 
 if (testRateLimit) {

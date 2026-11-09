@@ -6,6 +6,7 @@ import { handleStats } from "./stats";
 import { redact } from "./redact";
 import { A2A_PATH, CARD_PATHS, cardResponse, handleA2a, taskKey } from "./a2a";
 import { CANARY_HEADER, CANARY_PATH_RE, canaryPage, canaryUrl, llmsTxt, newCanaryToken } from "./canary";
+import { isMcpEntry } from "./entries";
 import { Row, asString, truncate, truncateOrNull, cleanOrNull, joinKinds } from "./log";
 
 const COLUMNS = [
@@ -14,6 +15,9 @@ const COLUMNS = [
   "client_info", "tool", "args", "purpose", "note", "capabilities", "redactions", "context_id", "task_id"
 ] as const;
 const INSERT_SQL = `INSERT INTO events (${COLUMNS.join(", ")}) VALUES (${COLUMNS.map(() => "?").join(", ")})`;
+
+// IndexNow (Bing, Yandex…): public by design, served at /<key>.txt; scripts/indexnow.mjs pings with it.
+const INDEXNOW_KEY = "80e3bc40e4522966fb15dd51eece1b7c";
 
 const META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo";
 const META_PROTOCOL = "io.modelcontextprotocol/protocolVersion";
@@ -71,12 +75,15 @@ export default {
     const origin = url.hostname === env.PUBLIC_HOSTNAME ? `https://${env.PUBLIC_HOSTNAME}` : url.origin;
     const canary = newCanaryToken();
 
-    if (url.pathname === "/mcp") {
+    if (isMcpEntry(url.pathname)) {
       const hasBody = !["GET", "HEAD"].includes(request.method);
       // The tools read the canary link from this header (set here only; a client's own copy is dropped).
       const headers = new Headers(request.headers);
       headers.set(CANARY_HEADER, canaryUrl(origin, canary));
-      const forwarded = new Request(request.url, {
+      // The SDK only serves /mcp; the logged path (base.path) keeps the directory entry.
+      const target = new URL(request.url);
+      target.pathname = "/mcp";
+      const forwarded = new Request(target, {
         method: request.method,
         headers,
         body: hasBody ? body : undefined
@@ -111,7 +118,16 @@ export default {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
       });
     } else if (url.pathname === "/robots.txt") {
-      response = new Response("User-agent: *\nAllow: /\n", { headers: { "content-type": "text/plain" } });
+      response = new Response(`User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`, { headers: { "content-type": "text/plain" } });
+    } else if (url.pathname === "/sitemap.xml") {
+      // Only the public page; canary links (/c/…) must never be indexed or they would count as hits.
+      response = new Response(
+        `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n` +
+        `  <url><loc>${origin}/</loc></url>\n</urlset>\n`,
+        { headers: { "content-type": "application/xml; charset=utf-8", "cache-control": "public, max-age=3600" } }
+      );
+    } else if (url.pathname === `/${INDEXNOW_KEY}.txt`) {
+      response = new Response(INDEXNOW_KEY, { headers: { "content-type": "text/plain; charset=utf-8" } });
     } else if (url.pathname === "/llms.txt") {
       response = new Response(llmsTxt(origin, Number(env.RETENTION_DAYS) || 90), {
         headers: { "content-type": "text/plain; charset=utf-8", "cache-control": "public, max-age=300" }

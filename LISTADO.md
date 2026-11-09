@@ -20,7 +20,26 @@ titular.
   > removed before storage, and logs are deleted after 90 days. Only aggregated results are published.
   > Details and data protection notice: https://mcp.cribalo.com/
 
-- **URL:** `https://mcp.cribalo.com/mcp` (Streamable HTTP, sin autenticación).
+- **URL:** cada directorio recibe su propia puerta, para saber de dónde llega cada cliente
+  (`src/entries.ts`; el mismo servidor, Streamable HTTP, sin autenticación):
+
+  | Directorio | URL que se da de alta | Fecha de alta |
+  |---|---|---|
+  | Registro oficial (y agregadores que lo copian) | `https://mcp.cribalo.com/mcp` | 8 nov 2026 |
+  | API Tracker (formulario, no pide repositorio) | `https://mcp.cribalo.com/mcp/apitracker` | |
+  | mcp.so | `https://mcp.cribalo.com/mcp/mcp-so` | |
+  | Glama | `https://mcp.cribalo.com/mcp/glama` | |
+  | MCP Market | `https://mcp.cribalo.com/mcp/mcp-market` | |
+  | awesome-mcp-servers | `https://mcp.cribalo.com/mcp/awesome-mcp-servers` | |
+  | mcpservers.org | `https://mcp.cribalo.com/mcp/mcpservers-org` | |
+  | cursor.directory | `https://mcp.cribalo.com/mcp/cursor-directory` | |
+
+  Cerrados (9 nov 2026): Smithery (desde el 31 oct 2026 lo lleva Arcade y no admite altas nuevas),
+  PulseMCP y goose (se alimentan del registro oficial). Glama y API Tracker importan también el
+  registro oficial; lo que llegue de ahí entra por `/mcp`.
+
+  Para un directorio nuevo: añadirlo a `MCP_ENTRIES`, desplegar y luego darlo de alta.
+  Al dar un alta, anotar la fecha en esta tabla y en el registro de cambios de `METRICAS.md`.
 - **Categoría o etiquetas:** research, testing, security research. No usar «productivity», «database»
   ni nada que sugiera utilidad real.
 - **Repositorio:** ninguno público por ahora. Si se publica el código, enlazarlo aquí.

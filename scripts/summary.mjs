@@ -88,6 +88,14 @@ const sections = [
      FROM v GROUP BY client ORDER BY any_req DESC LIMIT ${limit}`
   ],
   [
+    "Puerta de entrada MCP (/mcp = registro oficial y directorios que lo copian; /mcp/<directorio> = alta propia)",
+    `${EV}, v AS (SELECT path, ip_hash, user_agent, max(coalesce(rpc_method = 'initialize', 0)) AS init,
+       max(coalesce(rpc_method = 'tools/list', 0)) AS list, max(coalesce(rpc_method = 'tools/call', 0)) AS call
+       FROM ev WHERE kind = 'mcp' GROUP BY path, ip_hash, user_agent)
+     SELECT path AS entrada, count(*) AS visitantes, sum(init) AS initialize, sum(list) AS tools_list, sum(call) AS tools_call
+     FROM v GROUP BY path ORDER BY visitantes DESC LIMIT ${limit}`
+  ],
+  [
     "Sesiones (huecos < 30 min por ip_hash + user_agent)",
     `${EV}, g AS (SELECT ip_hash, user_agent, ts, tool, julianday(ts) AS j,
          CASE WHEN julianday(ts) - LAG(julianday(ts)) OVER (PARTITION BY ip_hash, user_agent ORDER BY ts) < 30.0 / 1440
@@ -153,7 +161,7 @@ const sections = [
     `${EV} SELECT path, http_method, rpc_method, client AS cliente_declarado, as_org, substr(user_agent, 1, 80) AS user_agent, count(*) AS n
      FROM ev
      WHERE path LIKE '/.well-known/%' OR path = '/a2a' OR rpc_method IN ('server/discover', 'initialize')
-        OR (path = '/' AND http_method = 'POST') OR (path LIKE '%mcp%' AND path <> '/mcp')
+        OR (path = '/' AND http_method = 'POST') OR (path LIKE '%mcp%' AND path <> '/mcp' AND kind <> 'mcp')
         OR (kind = 'mcp' AND rpc_method IS NULL)
      GROUP BY path, http_method, rpc_method, client, as_org, user_agent ORDER BY n DESC LIMIT ${limit}`
   ],

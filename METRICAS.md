@@ -54,4 +54,16 @@ Sesiones (duración, peticiones por sesión), orden de los métodos, tiempo hast
 ## Registro de cambios
 
 - 8 nov 2026: versión inicial.
-- Fecha de alta en el primer directorio: *(pendiente)*.
+- Fecha de alta en el primer directorio: **8 nov 2026** (MCP Registry oficial, `com.cribalo/research-mcp`).
+  El periodo de 60 días va del 8 nov 2026 al 7 ene 2027.
+- 9 nov 2026: la portada `/` deja de llevar `noindex`, tiene sitemap y se da de alta en Google Search
+  Console, Bing Webmaster Tools e IndexNow. No cambia ninguna métrica, pero desde esta fecha llegarán
+  más visitas web (personas y rastreadores de buscadores). Eso baja el % de M1 sin que cambie el uso de MCP:
+  el informe da M1 antes y después de esta fecha, además del total.
+- 9 nov 2026: puertas de entrada por directorio (`/mcp/<directorio>`, lista fija en `src/entries.ts`),
+  que sirven el mismo servidor y guardan su ruta. M8 («rutas con mcp distintas de `/mcp`») excluye
+  ahora esas rutas cuando llegan como MCP (`kind = 'mcp'`), porque son el servidor y no un escaneo.
+  Cualquier otra `/mcp/...` sigue siendo un 404 y cuenta en M8. Todavía no se había publicado ninguna puerta,
+  así que no se ha perdido ningún dato. Aun así, M8 se interpreta con esta regla desde el principio.
+  La comparación entre directorios sigue siendo exploratoria: el registro oficial y los agregadores
+  que lo copian entran todos por `/mcp` y no se pueden separar.

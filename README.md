@@ -155,6 +155,19 @@ con `?doc=`), y los `SendMessage` de A2A al final de la respuesta. El texto lo p
 
 `/llms.txt` describe el señuelo, sus endpoints y qué se registra.
 
+**Puertas por directorio (9 nov 2026):** el mismo servidor MCP se sirve también en
+`/mcp/<directorio>` para una lista fija (`src/entries.ts`: apitracker, mcp-so, glama, mcp-market,
+awesome-mcp-servers, mcpservers-org, cursor-directory). El Worker reescribe la URL a `/mcp` para el SDK,
+pero guarda la ruta original en `path`. Cualquier otra `/mcp/...` da 404 y cuenta como escáner.
+`npm run summary` tiene la sección **Puerta de entrada MCP**, y el panel y el resumen no cuentan
+esas rutas como escaneo. Las URLs y las fechas de alta están en `LISTADO.md`.
+
+**Buscadores (9 nov 2026):** la portada se puede indexar (antes llevaba `noindex`) y tiene descripción,
+`canonical` y etiquetas Open Graph. `/robots.txt` apunta a `/sitemap.xml`, que solo lista `/`. Los
+enlaces canario siguen con `noindex` y nunca entran en el sitemap: si los indexara un buscador,
+contarían como visitas falsas. La clave de IndexNow (`INDEXNOW_KEY` en `src/index.ts`) es pública por
+diseño y se sirve en `/<clave>.txt`. Las peticiones a estas rutas se registran como el resto (`kind = 'http'`).
+
 ### Ocultación de secretos y datos personales
 
 Antes de guardar, `src/redact.ts` sustituye cada coincidencia por `[REDACTED:<tipo>]` en `args`
@@ -319,6 +332,13 @@ Desde el 9 nov 2026 el token de Cloudflare está en `.env` (permisos 600, en `.g
 
 ```bash
 cd /opt/mcp-senuelo && (set -a && . .env && set +a && npx wrangler deploy)
+```
+
+Si cambia la portada, después avisar a los buscadores de IndexNow (Bing, Yandex…), que solo reciben
+las URLs públicas:
+
+```bash
+cd /opt/mcp-senuelo && npm run indexnow
 ```
 
 La página de `/` está en inglés desde el 9 nov 2026, con un resumen de privacidad en español.
