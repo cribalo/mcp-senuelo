@@ -29,7 +29,7 @@ titular.
   | API Tracker (formulario, no pide repositorio) | `https://mcp.cribalo.com/mcp/apitracker` | enviado 9 nov 2026, en revisión (ref. fcd6dcde0ce02dcec38caefd) |
   | mcp.so | `https://mcp.cribalo.com/mcp/mcp-so` | |
   | Glama | `https://mcp.cribalo.com/mcp/glama` | |
-  | MCP Market | `https://mcp.cribalo.com/mcp/mcp-market` | |
+  | MCP Market | `https://mcp.cribalo.com/mcp/mcp-market` | no dado de alta: el alta de un MCP remoto solo es de pago (69 $, 9 nov 2026); la cola gratuita es solo para repositorios con un servidor instalable |
   | awesome-mcp-servers | `https://mcp.cribalo.com/mcp/awesome-mcp-servers` | |
   | mcpservers.org | `https://mcp.cribalo.com/mcp/mcpservers-org` | |
   | cursor.directory | `https://mcp.cribalo.com/mcp/cursor-directory` | |
