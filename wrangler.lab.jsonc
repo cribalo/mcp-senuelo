@@ -1,0 +1,26 @@
+// LAB ONLY (LABORATORIO.md, tanda 2): the decoy without its notice. Never deploy this config.
+// It has no account, routes or workers.dev, and src/lab-silent.ts only answers documentation-range IPs.
+// npx wrangler d1 migrations apply mcp-senuelo-lab --local -c wrangler.lab.jsonc --persist-to lab/state-silent
+// npx wrangler dev -c wrangler.lab.jsonc --port 8790 --ip 127.0.0.1 --local-upstream mcp.cribalo.com --persist-to lab/state-silent
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "mcp-senuelo-lab",
+  "main": "src/lab-silent.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": false },
+  "workers_dev": false,
+  "d1_databases": [
+    { "binding": "DB", "database_name": "mcp-senuelo-lab", "database_id": "00000000-0000-0000-0000-00000000lab0", "migrations_dir": "migrations" }
+  ],
+  "ratelimits": [
+    { "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 30, "period": 60 } }
+  ],
+  "vars": {
+    "PUBLIC_HOSTNAME": "mcp.cribalo.com",
+    "RETENTION_DAYS": "90",
+    "MAX_BODY_BYTES": "32768",
+    "MAX_FIELD_CHARS": "2000",
+    "CONTACT": "contact@cribalo.com"
+  }
+}

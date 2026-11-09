@@ -1,5 +1,6 @@
 import { createMcpHandler } from "agents/mcp/server";
 import { createServer } from "./tools";
+import type { McpServer } from "@modelcontextprotocol/server";
 import { renderHome } from "./page";
 import { handleDash } from "./dash";
 import { handleStats } from "./stats";
@@ -22,24 +23,28 @@ const INDEXNOW_KEY = "80e3bc40e4522966fb15dd51eece1b7c";
 const META_CLIENT_INFO = "io.modelcontextprotocol/clientInfo";
 const META_PROTOCOL = "io.modelcontextprotocol/protocolVersion";
 
-// One handler per hostname: the SDK checks Host, and the Worker is reachable both
-// on workers.dev and on the custom domain. Cloudflare only routes our own hostnames here.
-const handlers = new Map<string, ReturnType<typeof createMcpHandler>>();
-function getHandler(hostname: string, env: Env) {
-  let h = handlers.get(hostname);
-  if (!h) {
-    h = createMcpHandler(createServer, {
-      route: "/mcp",
-      allowedHostnames: [hostname, env.PUBLIC_HOSTNAME],
-      // Browsers on other sites must not be able to drive visitors' browsers against /mcp.
-      allowedOriginHostnames: [env.PUBLIC_HOSTNAME]
-    });
-    handlers.set(hostname, h);
-  }
-  return h;
-}
+export default makeWorker(createServer);
 
-export default {
+// The lab (src/lab-silent.ts) reuses the same Worker with another set of tools; production uses ./tools.
+export function makeWorker(serverFactory: (ctx?: { requestInfo?: Request }) => McpServer) {
+  // One handler per hostname: the SDK checks Host, and the Worker is reachable both
+  // on workers.dev and on the custom domain. Cloudflare only routes our own hostnames here.
+  const handlers = new Map<string, ReturnType<typeof createMcpHandler>>();
+  function getHandler(hostname: string, env: Env) {
+    let h = handlers.get(hostname);
+    if (!h) {
+      h = createMcpHandler(serverFactory, {
+        route: "/mcp",
+        allowedHostnames: [hostname, env.PUBLIC_HOSTNAME],
+        // Browsers on other sites must not be able to drive visitors' browsers against /mcp.
+        allowedOriginHostnames: [env.PUBLIC_HOSTNAME]
+      });
+      handlers.set(hostname, h);
+    }
+    return h;
+  }
+
+  return {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
     const maxBody = Number(env.MAX_BODY_BYTES) || 32768;
@@ -151,7 +156,8 @@ export default {
       "DELETE FROM events WHERE ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)"
     ).bind(`-${days} days`).run();
   }
-} satisfies ExportedHandler<Env>;
+  } satisfies ExportedHandler<Env>;
+}
 
 function baseRow(request: Request, url: URL, ipHash: string): Row {
   const cf = (request.cf ?? {}) as { country?: string; asn?: number; asOrganization?: string };
