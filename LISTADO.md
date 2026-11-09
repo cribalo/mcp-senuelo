@@ -26,7 +26,7 @@ titular.
   | Directorio | URL que se da de alta | Fecha de alta |
   |---|---|---|
   | Registro oficial (y agregadores que lo copian) | `https://mcp.cribalo.com/mcp` | 8 nov 2026 |
-  | API Tracker (formulario, no pide repositorio) | `https://mcp.cribalo.com/mcp/apitracker` | |
+  | API Tracker (formulario, no pide repositorio) | `https://mcp.cribalo.com/mcp/apitracker` | enviado 9 nov 2026, en revisión (ref. fcd6dcde0ce02dcec38caefd) |
   | mcp.so | `https://mcp.cribalo.com/mcp/mcp-so` | |
   | Glama | `https://mcp.cribalo.com/mcp/glama` | |
   | MCP Market | `https://mcp.cribalo.com/mcp/mcp-market` | |

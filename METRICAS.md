@@ -67,3 +67,5 @@ Sesiones (duración, peticiones por sesión), orden de los métodos, tiempo hast
   así que no se ha perdido ningún dato. Aun así, M8 se interpreta con esta regla desde el principio.
   La comparación entre directorios sigue siendo exploratoria: el registro oficial y los agregadores
   que lo copian entran todos por `/mcp` y no se pueden separar.
+- 9 nov 2026: solicitud de alta en API Tracker (`/mcp/apitracker`), pendiente de revisión editorial.
+  Si la aprueban, se anota aquí la fecha de publicación.
