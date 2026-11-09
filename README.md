@@ -188,6 +188,18 @@ no evidentes (nombres, direcciones) sigue guardándose. Pruebas: `node scripts/r
 **Retención:** 90 días (`RETENTION_DAYS`). La purga corre a diario con un cron. Workers Logs
 está desactivado (`observability.enabled: false`), así que D1 es el único registro.
 
+### Cifras públicas (`/stats.json`, `src/stats.ts`)
+
+`GET /stats.json` publica solo totales: peticiones, visitantes (IP con hash + User-Agent),
+visitantes MCP, clientes MCP distintos, visitantes que llamaron a herramientas, llamadas, llamadas
+con `purpose`, visitantes y mensajes A2A, y enlaces canario visitados, cada uno con su definición.
+No incluye hashes de IP, User-Agents, argumentos ni textos. Se calcula como mucho cada 5 minutos
+por centro de datos (Cache API) y sus peticiones no se registran. criba.cribalo.com lo lee por un
+*service binding* para sus cifras en vivo.
+
+Nota: Cloudflare lo sirve con `max-age=14400` por el ajuste «Browser Cache TTL» de la zona; se
+puede cambiar a «Respect Existing Headers». A criba no le afecta.
+
 ## Panel en directo (`/dash/`)
 
 Panel privado para ver el registro casi en tiempo real: contadores, actividad por tipo, feed con
@@ -301,6 +313,15 @@ Resultado el 8 nov 2026: 21 de 21 pruebas pasan en local, y la purga del cron, p
 `/cdn-cgi/handler/scheduled`, borra una fila de 2020 y conserva las recientes.
 
 ## Desplegar
+
+Desde el 9 nov 2026 el token de Cloudflare está en `.env` (permisos 600, en `.gitignore`), no en
+`~/.bashrc`. El despliegue lo lanza el titular:
+
+```bash
+cd /opt/mcp-senuelo && (set -a && . .env && set +a && npx wrangler deploy)
+```
+
+La página de `/` está en inglés desde el 9 nov 2026, con un resumen de privacidad en español.
 
 **Desplegado el 8 nov 2026** en `https://mcp.cribalo.com`, en la cuenta de Cloudflare
 «Femogo@gmail.com's Account» (`de3e30eb…`). Esa cuenta también tiene la zona `cribalo.com`, y
