@@ -2,6 +2,7 @@ import { createMcpHandler } from "agents/mcp/server";
 import { createServer } from "./tools";
 import { renderHome } from "./page";
 import { handleDash } from "./dash";
+import { handleStats } from "./stats";
 import { redact } from "./redact";
 import { A2A_PATH, CARD_PATHS, cardResponse, handleA2a, taskKey } from "./a2a";
 import { CANARY_HEADER, CANARY_PATH_RE, canaryPage, canaryUrl, llmsTxt, newCanaryToken } from "./canary";
@@ -59,6 +60,8 @@ export default {
       if (body === null) return new Response("Payload too large\n", { status: 413 });
       return handleDash(request, url, env, body);
     }
+    // Public aggregate figures, read by criba.cribalo.com. Not logged: it is polled, not visited.
+    if (url.pathname === "/stats.json") return handleStats(request, env, ctx);
     if (body === null) {
       log([{ ...base, kind: "rejected", status: 413, note: `body > ${maxBody} bytes` }]);
       return new Response("Payload too large\n", { status: 413 });

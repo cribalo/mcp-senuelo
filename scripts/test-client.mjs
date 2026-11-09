@@ -93,6 +93,22 @@ await check("/llms.txt describes the decoy", async () => {
   assert.match(t, /agent-card\.json/);
 });
 
+await check("/stats.json publishes totals only and is not logged", async () => {
+  const res = await fetch(base + "/stats.json?" + runId);
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("access-control-allow-origin"), "*");
+  const j = await res.json();
+  for (const k of ["requests", "visitors", "mcp_clients", "tool_visitors", "tool_calls", "tool_calls_with_purpose"]) {
+    assert.equal(typeof j.totals[k], "number", k);
+  }
+  assert.ok(j.definitions.visitor);
+  const text = JSON.stringify(j);
+  assert.doesNotMatch(text, /ip_hash|user_agent|"args"/, "no per-request fields");
+  const rows = JSON.parse(execFileSync("npx", ["wrangler", "d1", "execute", "mcp-senuelo", d1Where, "--json", "--command",
+    `SELECT COUNT(*) AS n FROM events WHERE path = '/stats.json'`], { encoding: "utf8" }))[0].results[0].n;
+  assert.equal(rows, 0, "stats requests are not logged");
+});
+
 await check("fetch_url does not fetch", async () => {
   const r = await client.callTool({
     name: "fetch_url",

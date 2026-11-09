@@ -42,6 +42,7 @@ Los resultados agregados pueden publicarse en informes, también en informes que
 los registros individuales nunca se ceden ni se venden. Cada herramienta pide un campo <code>purpose</code>:
 rellenarlo es voluntario en el sentido de que su contenido lo decide quien llama; agradecemos que sea sincero.</p>
 <p>El servidor no pide <em>sampling</em> ni <em>elicitation</em> y no devuelve instrucciones a los agentes.</p>
+<p>Las cifras agregadas (solo totales, sin IPs ni textos) se publican en <a href="/stats.json">/stats.json</a> y se actualizan cada 5 minutos.</p>
 <h2>Protección de datos</h2>
 <p>Responsable: el titular de cribalo.com (contacto abajo). Base jurídica: interés legítimo en la
 investigación sobre el uso de servidores MCP por agentes de IA (art. 6.1.f RGPD). Encargado:
@@ -57,7 +58,8 @@ ${contactLine}
 logged (time, Cloudflare country and ASN, salted hash of the IP, User-Agent, clientInfo, methods, tool,
 truncated arguments and the <code>purpose</code> field; for A2A, the method, protocol version, truncated message text, requested skill and context/task ids) and kept for ${retentionDays} days, to study which MCP clients
 and agents connect to open servers and why. Each synthetic result carries its own reference link (<code>/c/…</code>);
-visits to it are logged, to see whether agents act on results. Requests to any other path are logged too.
+visits to it are logged, to see whether agents act on results. Aggregate figures (totals only) are published at
+<a href="/stats.json">/stats.json</a>, refreshed every 5 minutes. Requests to any other path are logged too.
 Obvious secrets and personal data (API keys and tokens, email addresses, user names in file paths, card numbers,
 IBANs, Spanish ID numbers, phone numbers) are replaced by <code>[REDACTED:…]</code> before anything is stored. Aggregated results may be published
 in reports, including reports offered commercially; individual records are never shared or sold.</p>

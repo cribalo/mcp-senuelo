@@ -47,6 +47,7 @@ export function llmsTxt(origin: string, retentionDays: number): string {
 - A2A (JSON-RPC 2.0, versions 1.0 and 0.3): ${origin}/a2a
 - Agent Card: ${origin}/.well-known/agent-card.json
 - MCP Registry entry: com.cribalo/research-mcp
+- Aggregate figures (totals only, refreshed every 5 minutes): ${origin}/stats.json
 
 ## What is logged
 Time, HMAC-hashed IP, country and network, User-Agent, protocol method, client name and version,
