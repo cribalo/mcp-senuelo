@@ -122,7 +122,7 @@
     return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n);
   }
   const SCAN_CATS = [
-    ["MCP/IA-aware", (p, e) => /^\/\.well-known\/(oauth|mcp|agent)/i.test(p) || p === "/a2a" || (e.http_method === "POST" && p === "/") || e.rpc_method === "server/discover" || (/mcp/i.test(p) && p !== "/mcp" && e.kind !== "mcp")],
+    ["MCP/IA-aware", (p, e) => /^\/\.well-known\/(oauth|mcp|agent)/i.test(p) || p === "/a2a" || (e.http_method === "POST" && p === "/") || (e.rpc_method === "server/discover" && discoverOnly.has(e.ip_hash + "|" + (e.user_agent || ""))) || (/mcp/i.test(p) && p !== "/mcp" && e.kind !== "mcp")],
     ["secretos", (p) => /(\.env|\.git|\.ssh|\.npmrc|secrets|\.bash_history|credentials|server\.key|\.vscode|\.svn|_vti_pvt)/i.test(p)],
     ["backups/BD", (p) => /(\.sql|backup|dump|\.tar\.gz|\.zip)/i.test(p)],
     ["PHP/WordPress", (p) => /(wp-|\.php|phpinfo)/i.test(p)],
@@ -281,10 +281,24 @@
     else box.append(el("p", "empty", "Sin mensajes A2A."));
     fill("p-a2a", box);
   }
+  // Real 2026-07-28 clients also start with server/discover (METRICAS.md, 9 Nov 2026): it is a scanner
+  // signal only from visitors (ip_hash + UA) that send no other MCP method besides server/discover and ping.
+  let discoverOnly = new Set();
+  function discoverOnlyVisitors(list) {
+    const disc = new Set(), other = new Set();
+    for (const e of list) {
+      if (e.kind !== "mcp" || !e.rpc_method) continue;
+      const k = e.ip_hash + "|" + (e.user_agent || "");
+      if (e.rpc_method === "server/discover") disc.add(k);
+      else if (e.rpc_method !== "ping") other.add(k);
+    }
+    return new Set([...disc].filter((k) => !other.has(k)));
+  }
   function renderScanners(list) {
+    discoverOnly = discoverOnlyVisitors(list);
     const m = new Map();
     for (const e of list) {
-      if (e.kind === "mcp" && e.rpc_method !== "server/discover") continue;
+      if (e.kind === "mcp" && !(e.rpc_method === "server/discover" && discoverOnly.has(e.ip_hash + "|" + (e.user_agent || "")))) continue;
       if (e.kind === "a2a" && e.note !== "agent-card") continue;
       const k = e.http_method + " " + e.path; let r = m.get(k);
       if (!r) { r = { key: k, n: 0, cat: category(e) }; m.set(k, r); } r.n++;

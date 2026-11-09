@@ -160,7 +160,11 @@ const sections = [
     "Escáneres que conocen MCP",
     `${EV} SELECT path, http_method, rpc_method, client AS cliente_declarado, as_org, substr(user_agent, 1, 80) AS user_agent, count(*) AS n
      FROM ev
-     WHERE path LIKE '/.well-known/%' OR path = '/a2a' OR rpc_method IN ('server/discover', 'initialize')
+     WHERE path LIKE '/.well-known/%' OR path = '/a2a'
+        -- Real 2026-07-28 clients also start with server/discover (METRICAS.md, 9 Nov): only discover-only visitors count.
+        OR (rpc_method = 'server/discover' AND NOT EXISTS (
+          SELECT 1 FROM ev o WHERE o.ip_hash = ev.ip_hash AND o.user_agent IS ev.user_agent
+            AND o.kind = 'mcp' AND o.rpc_method IS NOT NULL AND o.rpc_method NOT IN ('server/discover', 'ping')))
         OR (path = '/' AND http_method = 'POST') OR (path LIKE '%mcp%' AND path <> '/mcp' AND kind <> 'mcp')
         OR (kind = 'mcp' AND rpc_method IS NULL)
      GROUP BY path, http_method, rpc_method, client, as_org, user_agent ORDER BY n DESC LIMIT ${limit}`

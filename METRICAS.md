@@ -30,7 +30,7 @@ se anota al final con fecha y motivo, y lo afectado pasa a exploratorio. El info
 | M5 | ¿Llaman a herramientas peligrosas de un servidor desconocido? | % de visitantes con `tools/call` que llaman a `execute_script` o `read_file`, frente al % que llama a las otras cuatro; y qué piden (`language`, tipo de ruta) |
 | M6 | ¿Filtran datos de su usuario? | % de `tools/call` con `redactions` no vacío, por tipo (`api_key`, `email`, `home_path`, etc.) y por cliente declarado |
 | M7 | ¿Intentan SSRF o SQL peligroso? | % de llamadas a `fetch_url` con IP privada, de metadatos (`169.254.169.254`) o `file:`; % de `query_database` con `DROP`, `DELETE`, `UPDATE`, `INSERT` o varias sentencias |
-| M8 | ¿Qué buscan los escáneres que conocen MCP? | Peticiones a `/.well-known/*`, `POST /`, `server/discover`, rutas con «mcp» distintas de `/mcp`, por tipo y por red (ASN) |
+| M8 | ¿Qué buscan los escáneres que conocen MCP? | Peticiones a `/.well-known/*`, `POST /`, `server/discover` de visitantes que solo descubren (ver el registro de cambios del 9 nov), rutas con «mcp» distintas de `/mcp`, por tipo y por red (ASN) |
 | M9 | ¿Qué anuncian los clientes? | Reparto de `capabilities` declaradas (`roots`, `sampling`, `elicitation`) por cliente declarado |
 
 ## Reglas del análisis
@@ -78,3 +78,14 @@ Sesiones (duración, peticiones por sesión), orden de los métodos, tiempo hast
   `scripts/test-client.mjs` y `scripts/a2a-test.mjs` mandan siempre un UA `senuelo-*`. No se había publicado
   ninguna cifra confirmatoria, así que no cambia nada publicado. `/stats.json` aplicó la regla antigua
   unas horas del 9 nov.
+- 9 nov 2026: M8 deja de contar todo `server/discover` como señal de escáner. En el protocolo
+  `2026-07-28` lo envían también los clientes reales: en el laboratorio (LABORATORIO-RESULTADOS.md),
+  Claude Code 2.1.314 empezó siempre con `server/discover` → `subscriptions/listen` → `tools/list`, sin
+  `initialize`. Desde ahora, M8 cuenta un `server/discover` solo si viene de un visitante que solo
+  descubre: en todo el periodo, ese `ip_hash` + `user_agent` no envía ningún método MCP salvo
+  `server/discover` y `ping`. Los visitantes que siguen con cualquier otro método son clientes y
+  cuentan en M2–M3. La regla se ha fijado a partir del laboratorio, **sin consultar los datos de
+  producción**. No se había publicado ninguna cifra confirmatoria, así que no cambia nada publicado.
+  M8 sigue siendo confirmatoria y se interpreta con esta regla desde el principio. El panel
+  (`/dash`) y `scripts/summary.mjs` aplican la misma regla. En `summary.mjs`, la consulta exploratoria
+  de escáneres tampoco cuenta ya `initialize`, por el mismo motivo.
