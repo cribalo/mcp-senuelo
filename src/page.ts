@@ -1,14 +1,13 @@
 export function renderHome(contact: string, retentionDays: number): string {
-  const contactLine = contact
-    ? `<p>Contacto / contact: <a href="mailto:${escapeHtml(contact)}">${escapeHtml(contact)}</a></p>`
-    : "";
+  const mail = contact ? escapeHtml(contact) : "";
+  const contactLine = mail ? `<p>Contact: <a href="mailto:${mail}">${mail}</a></p>` : "";
   return `<!doctype html>
-<html lang="es">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
-<title>Servidor MCP de investigación</title>
+<title>Research MCP server</title>
 <style>
   body { font: 16px/1.55 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; color: #1d1d1f; background: #fff; }
   code { background: #f2f2f2; padding: .1em .3em; border-radius: 3px; }
@@ -17,52 +16,50 @@ export function renderHome(contact: string, retentionDays: number): string {
 </style>
 </head>
 <body>
-<h1>Servidor MCP de investigación</h1>
-<p><strong>Esto es un señuelo con fines de investigación.</strong> Es un servidor
-<a href="https://modelcontextprotocol.io/">MCP</a> público, en <code>/mcp</code>, cuyas herramientas
-son falsas: no ejecutan nada, no acceden a Internet y no dan acceso a ningún dato real. Sirve para
-estudiar qué clientes y agentes de IA se conectan a servidores MCP abiertos y para qué dicen venir.</p>
-<p>También hay un agente <a href="https://a2a-protocol.org/">A2A</a> (Agent2Agent) igual de falso:
-su descripción está en <code>/.well-known/agent-card.json</code> y recibe mensajes en <code>/a2a</code>.
-Responde siempre con un texto sintético que lo dice y no ejecuta nada.</p>
+<h1>Research MCP server</h1>
+<p><strong>This is a research decoy (honeypot).</strong> It is a public
+<a href="https://modelcontextprotocol.io/">MCP</a> server at <code>/mcp</code> whose tools are fake: they execute
+nothing, make no outbound requests and give access to no real data. It exists to study which AI clients and
+agents connect to open MCP servers, and what they say they come for.</p>
+<p>There is also an equally fake <a href="https://a2a-protocol.org/">A2A</a> (Agent2Agent) agent: its card is at
+<code>/.well-known/agent-card.json</code> and it receives messages at <code>/a2a</code>. It always answers with
+synthetic text that says so, and executes nothing.</p>
 
-<h2>Qué se registra</h2>
+<h2>What is logged</h2>
 <ul>
-  <li>Hora, país y red (ASN) según Cloudflare, y un <em>hash</em> con sal secreta de la IP (la IP en claro no se guarda).</li>
-  <li>User-Agent, versión del protocolo y la información del cliente que este envía (<code>clientInfo</code>).</li>
-  <li>Métodos MCP, herramienta llamada, sus argumentos (recortados) y el campo <code>purpose</code>.</li>
-  <li>En A2A: método, versión del protocolo, el texto de cada mensaje (recortado), el <em>skill</em> pedido y los identificadores de conversación y tarea.</li>
-  <li>Cada resultado sintético lleva un enlace de referencia propio (<code>/c/…</code>); si alguien lo visita, se registra la visita, para saber si los agentes usan los resultados.</li>
-  <li>También las peticiones a cualquier otra ruta de este dominio (método, ruta sin parámetros, User-Agent).</li>
+  <li>Time, country and network (ASN) as reported by Cloudflare, and a salted hash of the IP address (the IP itself is not stored).</li>
+  <li>User-Agent, protocol version and the client information the client sends (<code>clientInfo</code>).</li>
+  <li>MCP methods, the tool called, its arguments (truncated) and the <code>purpose</code> field.</li>
+  <li>For A2A: method, protocol version, the text of each message (truncated), the requested skill and the context and task ids.</li>
+  <li>Each synthetic result carries its own reference link (<code>/c/…</code>); visits to it are logged, to see whether agents act on results.</li>
+  <li>Requests to any other path on this domain (method, path without query string, User-Agent).</li>
 </ul>
-<p>Los registros se borran a los ${retentionDays} días. No se usan para identificar a nadie. Antes de guardarse,
-se ocultan los secretos y datos personales evidentes (claves de API y tokens, correos electrónicos, nombres de
-usuario en rutas de archivos, números de tarjeta, IBAN, DNI/NIE y teléfonos), que se sustituyen por <code>[REDACTED:…]</code>.
-Los resultados agregados pueden publicarse en informes, también en informes que se ofrezcan comercialmente;
-los registros individuales nunca se ceden ni se venden. Cada herramienta pide un campo <code>purpose</code>:
-rellenarlo es voluntario en el sentido de que su contenido lo decide quien llama; agradecemos que sea sincero.</p>
-<p>El servidor no pide <em>sampling</em> ni <em>elicitation</em> y no devuelve instrucciones a los agentes.</p>
-<p>Las cifras agregadas (solo totales, sin IPs ni textos) se publican en <a href="/stats.json">/stats.json</a> y se actualizan cada 5 minutos.</p>
-<h2>Protección de datos</h2>
-<p>Responsable: el titular de cribalo.com (contacto abajo). Base jurídica: interés legítimo en la
-investigación sobre el uso de servidores MCP por agentes de IA (art. 6.1.f RGPD). Encargado:
-Cloudflare; la base de datos está en la UE. Puedes ejercer los derechos de acceso, rectificación,
-supresión, oposición y limitación escribiendo al contacto. Como no se guarda la IP en claro,
-para localizar tus registros indica tu IP y la hora aproximada. Puedes reclamar ante la
-<a href="https://www.aepd.es/">AEPD</a>. No escribas datos personales en <code>purpose</code>.</p>
+<p>Records are deleted after ${retentionDays} days and are not used to identify anyone. Before anything is stored,
+obvious secrets and personal data (API keys and tokens, email addresses, user names in file paths, card numbers,
+IBANs, Spanish ID numbers and phone numbers) are replaced by <code>[REDACTED:…]</code>.
+Aggregated results may be published in reports, including reports offered commercially; individual records are
+never shared or sold. Every tool asks for a <code>purpose</code> field: what goes in it is up to the caller, and we
+appreciate an honest answer.</p>
+<p>The server does not request <em>sampling</em> or <em>elicitation</em> and returns no instructions to agents.</p>
+<p>Aggregate figures (totals only, no IP hashes or texts) are published at <a href="/stats.json">/stats.json</a>,
+refreshed every 5 minutes. They feed the live figures on <a href="https://criba.cribalo.com/">criba</a>.</p>
+
+<h2>Data protection</h2>
+<p>Controller: the owner of cribalo.com (contact below). Legal basis: legitimate interest in research on how AI
+agents use MCP servers (GDPR art. 6.1.f). Processor: Cloudflare; the database is in the EU. You can exercise your
+rights of access, rectification, erasure, objection and restriction by writing to the contact address. Since the IP
+address is not stored in clear, include your IP and the approximate time so we can find your records. You can
+complain to the Spanish data protection authority (<a href="https://www.aepd.es/">AEPD</a>). Do not put personal
+data in <code>purpose</code>.</p>
 ${contactLine}
 
-<h2 lang="en">In English</h2>
-<p lang="en"><strong>This is a research honeypot.</strong> The MCP endpoint at <code>/mcp</code> and the A2A agent at
-<code>/a2a</code> (card at <code>/.well-known/agent-card.json</code>) are fake and harmless: nothing is executed, no outbound requests are made and no real data exists. Every call is
-logged (time, Cloudflare country and ASN, salted hash of the IP, User-Agent, clientInfo, methods, tool,
-truncated arguments and the <code>purpose</code> field; for A2A, the method, protocol version, truncated message text, requested skill and context/task ids) and kept for ${retentionDays} days, to study which MCP clients
-and agents connect to open servers and why. Each synthetic result carries its own reference link (<code>/c/…</code>);
-visits to it are logged, to see whether agents act on results. Aggregate figures (totals only) are published at
-<a href="/stats.json">/stats.json</a>, refreshed every 5 minutes. Requests to any other path are logged too.
-Obvious secrets and personal data (API keys and tokens, email addresses, user names in file paths, card numbers,
-IBANs, Spanish ID numbers, phone numbers) are replaced by <code>[REDACTED:…]</code> before anything is stored. Aggregated results may be published
-in reports, including reports offered commercially; individual records are never shared or sold.</p>
+<h2 lang="es">En español</h2>
+<p lang="es">Esto es un señuelo con fines de investigación: las herramientas MCP y el agente A2A son falsos y no
+ejecutan nada. Se registran las peticiones (hora, país y red, un hash de la IP, User-Agent, métodos, herramienta,
+argumentos recortados y el campo <code>purpose</code>) durante ${retentionDays} días, ocultando antes secretos y
+datos personales evidentes. Base jurídica: interés legítimo en la investigación (art. 6.1.f RGPD). Encargado:
+Cloudflare (UE). Derechos de acceso, rectificación, supresión, oposición y limitación: escribe al contacto${mail ? ` (<a href="mailto:${mail}">${mail}</a>)` : ""}
+indicando tu IP y la hora aproximada. Puedes reclamar ante la <a href="https://www.aepd.es/">AEPD</a>.</p>
 </body>
 </html>`;
 }

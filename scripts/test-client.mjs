@@ -25,10 +25,12 @@ await check("GET / explains the server", async () => {
   const res = await fetch(base + "/");
   assert.equal(res.status, 200);
   const html = await res.text();
-  assert.match(html, /señuelo con fines de investigación/);
-  assert.match(html, /research honeypot/);
+  assert.match(html, /<html lang="en">/);
+  assert.match(html, /This is a research decoy/);
+  assert.match(html, /stats\.json/);
+  assert.match(html, /honeypot/);
   assert.match(html, /REDACTED/);
-  assert.match(html, /nunca se ceden ni se venden/);
+  assert.match(html, /lang="es">En español/);
   assert.match(html, /never shared or sold/);
 });
 
