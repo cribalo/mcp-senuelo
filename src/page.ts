@@ -40,7 +40,9 @@ synthetic text that says so, and executes nothing.</p>
   <li>Each synthetic result carries its own reference link (<code>/c/…</code>); visits to it are logged, to see whether agents act on results.</li>
   <li>Requests to any other path on this domain (method, path without query string, User-Agent).</li>
 </ul>
-<p>Records are deleted after ${retentionDays} days and are not used to identify anyone. Before anything is stored,
+<p>Records are deleted after ${retentionDays} days and are not used to identify anyone. Daily aggregate counts
+(for example, requests per country or per declared client) are kept beyond that; they hold no IP hashes,
+User-Agents, arguments or texts. Before anything is stored,
 obvious secrets and personal data (API keys and tokens, email addresses, user names in file paths, card numbers,
 IBANs, Spanish ID numbers and phone numbers) are replaced by <code>[REDACTED:…]</code>.
 Aggregated results may be published in reports, including reports offered commercially; individual records are
@@ -63,7 +65,8 @@ ${contactLine}
 <p lang="es">Esto es un señuelo con fines de investigación: las herramientas MCP y el agente A2A son falsos y no
 ejecutan nada. Se registran las peticiones (hora, país y red, un hash de la IP, User-Agent, métodos, herramienta,
 argumentos recortados y el campo <code>purpose</code>) durante ${retentionDays} días, ocultando antes secretos y
-datos personales evidentes. Base jurídica: interés legítimo en la investigación (art. 6.1.f RGPD). Encargado:
+datos personales evidentes. Después se conservan solo recuentos diarios agregados, sin hashes de IP, User-Agents
+ni textos. Base jurídica: interés legítimo en la investigación (art. 6.1.f RGPD). Encargado:
 Cloudflare (UE). Derechos de acceso, rectificación, supresión, oposición y limitación: escribe al contacto${mail ? ` (<a href="mailto:${mail}">${mail}</a>)` : ""}
 indicando tu IP y la hora aproximada. Puedes reclamar ante la <a href="https://www.aepd.es/">AEPD</a>.</p>
 </body>

@@ -89,3 +89,9 @@ Sesiones (duración, peticiones por sesión), orden de los métodos, tiempo hast
   M8 sigue siendo confirmatoria y se interpreta con esta regla desde el principio. El panel
   (`/dash`) y `scripts/summary.mjs` aplican la misma regla. En `summary.mjs`, la consulta exploratoria
   de escáneres tampoco cuenta ya `initialize`, por el mismo motivo.
+- 10 nov 2026: el cron guarda recuentos diarios agregados (tabla `daily`, `src/daily.ts`) antes de la
+  purga de 90 días, para que el histórico sobreviva. No cambia ninguna métrica ni la definición de
+  visitante. Es una copia resumida para el trabajo exploratorio posterior al periodo; M1–M9 se calculan
+  sobre `events`, como estaba previsto. Diferencia declarada: en `daily`, un visitante cuenta como nuestro
+  si tiene una fila marcada ese mismo día UTC, no en todo el periodo. Las celdas con menos de 5 visitantes
+  se guardan pero no se publican. `/stats.json` pasa a guardar su cálculo en D1 5 minutos (mismas cifras).

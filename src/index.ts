@@ -4,6 +4,7 @@ import type { McpServer } from "@modelcontextprotocol/server";
 import { renderHome } from "./page";
 import { handleDash } from "./dash";
 import { handleStats } from "./stats";
+import { aggregateDaily, nextDay } from "./daily";
 import { redact } from "./redact";
 import { A2A_PATH, CARD_PATHS, cardResponse, handleA2a, taskKey } from "./a2a";
 import { CANARY_HEADER, CANARY_PATH_RE, canaryPage, canaryUrl, llmsTxt, newCanaryToken } from "./canary";
@@ -152,9 +153,23 @@ export function makeWorker(serverFactory: (ctx?: { requestInfo?: Request }) => M
 
   async scheduled(_controller, env): Promise<void> {
     const days = Number(env.RETENTION_DAYS) || 90;
-    await env.DB.prepare(
-      "DELETE FROM events WHERE ts < strftime('%Y-%m-%dT%H:%M:%fZ', 'now', ?)"
-    ).bind(`-${days} days`).run();
+    // Aggregate first (src/daily.ts). The purge then stops at the first day not yet aggregated, so a failed
+    // or partial aggregation keeps the rows for the next run instead of losing them.
+    let through: string | null = null;
+    try {
+      through = await aggregateDaily(env);
+    } catch (err) {
+      console.error("daily aggregation failed", String(err));
+      try {
+        through = (await env.DB.prepare("SELECT value FROM kv WHERE key = 'daily_through'").first<{ value: string }>())?.value ?? null;
+      } catch {
+        through = null;
+      }
+    }
+    if (!through) return;
+    const retention = new Date(Date.now() - days * 86_400_000).toISOString();
+    const aggregated = `${nextDay(through)}T00:00:00.000Z`;
+    await env.DB.prepare("DELETE FROM events WHERE ts < ?").bind(retention < aggregated ? retention : aggregated).run();
   }
   } satisfies ExportedHandler<Env>;
 }

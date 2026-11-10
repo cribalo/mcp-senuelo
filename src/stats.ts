@@ -1,18 +1,12 @@
 // Public aggregate figures (GET /stats.json): totals only, no IP hashes, user agents, arguments or texts.
-// Computed from D1 at most once per CACHE_SECONDS per data centre; requests to it are not logged.
+// The body is cached at the edge for CACHE_SECONDS per data centre and, behind that, in D1 (kv['stats']), so the
+// full scans of `events` run at most about once per CACHE_SECONDS in total, not once per data centre.
+// Requests to it are not logged.
+import { OWN_ROW, VISITOR } from "./own.ts"; // with .ts so Node can import this module in scripts/stats-test.mjs
 const CACHE_SECONDS = 300;
 const CACHE_KEY = "https://stats.internal/mcp-senuelo/v1";
 
-// A visitor is one (hashed IP, User-Agent) pair, as in scripts/summary.mjs.
-const VISITOR = "ip_hash || '|' || COALESCE(user_agent, '')";
 const A2A_SEND = "('SendMessage','message/send','SendStreamingMessage','message/stream')";
-
-// Our own tests, by the rules in METRICAS.md: User-Agent `senuelo-*`, or a purpose or client version that
-// starts with `test-`. A visitor with any such row is left out entirely, and so is a canary visit to a link
-// that was issued to one of those visitors. User-Agent `node` alone is not a rule: it is Node's default and
-// third-party crawlers (glama and others) send it too.
-const OWN_ROW = `(COALESCE(user_agent, '') LIKE 'senuelo-%'
-  OR COALESCE(purpose, '') LIKE 'test-%' OR COALESCE(client_version, '') LIKE 'test-%')`;
 
 const SQL = `WITH own AS (SELECT DISTINCT ${VISITOR} AS v FROM events WHERE ${OWN_ROW}),
 e AS (SELECT * FROM events WHERE kind <> 'rejected' AND ${VISITOR} NOT IN (SELECT v FROM own))
@@ -77,6 +71,29 @@ const headers = {
   "x-content-type-options": "nosniff"
 };
 
+// Serves kv['stats'] while it is younger than CACHE_SECONDS; otherwise recomputes and stores it.
+// Exported for scripts/stats-test.mjs, which counts how often compute runs.
+export async function statsBody(env: Env, now = Date.now(), recompute: (env: Env) => Promise<Stats> = compute): Promise<string> {
+  try {
+    const saved = await env.DB.prepare("SELECT value, updated_at FROM kv WHERE key = 'stats'")
+      .first<{ value: string; updated_at: string }>();
+    if (saved && now - Date.parse(saved.updated_at) < CACHE_SECONDS * 1000) return saved.value;
+  } catch {
+    // Table missing (migration not applied yet) or D1 hiccup: fall through and compute.
+  }
+  const stats = await recompute(env);
+  const body = JSON.stringify(stats, null, 2);
+  try {
+    await env.DB.prepare(
+      "INSERT INTO kv (key, value, updated_at) VALUES ('stats', ?, ?) " +
+      "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at"
+    ).bind(body, new Date(now).toISOString()).run();
+  } catch {
+    // Not stored: the next miss computes again. The answer itself is still good.
+  }
+  return body;
+}
+
 export async function handleStats(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   if (request.method !== "GET" && request.method !== "HEAD") {
     return new Response("Method not allowed\n", { status: 405, headers: { allow: "GET, HEAD" } });
@@ -87,7 +104,7 @@ export async function handleStats(request: Request, env: Env, ctx: ExecutionCont
   if (hit) return request.method === "HEAD" ? new Response(null, { headers: hit.headers }) : hit;
   let body: string;
   try {
-    body = JSON.stringify(await compute(env), null, 2);
+    body = await statsBody(env);
   } catch {
     return new Response(JSON.stringify({ error: "stats unavailable" }), { status: 503, headers: { ...headers, "cache-control": "no-store" } });
   }

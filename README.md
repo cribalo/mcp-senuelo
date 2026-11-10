@@ -201,6 +201,26 @@ no evidentes (nombres, direcciones) sigue guardándose. Pruebas: `node scripts/r
 **Retención:** 90 días (`RETENTION_DAYS`). La purga corre a diario con un cron. Workers Logs
 está desactivado (`observability.enabled: false`), así que D1 es el único registro.
 
+**Recuentos diarios (`src/daily.ts`, tabla `daily`, desde el 10 nov 2026):** antes de la purga, el cron
+agrega cada día UTC terminado y guarda solo recuentos, que sobreviven a los 90 días. No guarda hashes de IP,
+User-Agents completos, `purpose` ni argumentos. Deja fuera nuestras pruebas con la misma regla que
+`/stats.json` (`src/own.ts`), aunque aquí un visitante cuenta como nuestro si tiene una fila marcada ese mismo
+día. Así cada ejecución recorre solo el día por índice.
+
+| `metric` | `key` | `n` |
+|---|---|---|
+| `requests`, `visitors` | `total`, `mcp`, `a2a`, `http`, `rejected`; en `visitors` también `tools_call` | peticiones o visitantes |
+| `requests_by_<dim>`, `visitors_by_<dim>` | valor de la dimensión: `rpc_method` y `tool` y `protocol_version` con prefijo `mcp:`/`a2a:`, `client_name` en minúsculas, `country`, `as_org`, `path_class` (`mcp`, `a2a`, `card`, `well-known`, `canary`, `home`, `other-404`, `other`, `rejected`) | peticiones o visitantes |
+| `requests_by_redaction` | tipo ocultado | peticiones |
+| `canary` | `issued`, `hit`, `links_followed` | enlaces emitidos, visitas y enlaces distintos visitados |
+
+`client_name` y `as_org` guardan los 200 valores con más visitantes por día; el resto va a `(other)`. Las
+celdas pequeñas se guardan, pero no se publican con menos de 5 visitantes (METRICAS.md). Se agregan como
+mucho 10 días por ejecución (límite de 50 consultas por invocación del plan gratuito). La purga nunca borra
+un día que aún no se ha agregado: si la agregación falla, las filas esperan a la siguiente ejecución.
+`kv['daily_through']` guarda el último día agregado. Prueba: `node scripts/daily-test.mjs` contra
+`npm run dev` (borra los agregados locales).
+
 ### Cifras públicas (`/stats.json`, `src/stats.ts`)
 
 `GET /stats.json` publica solo totales: peticiones, visitantes (IP con hash + User-Agent),
@@ -212,8 +232,10 @@ versión de cliente empiece por `test-`. También quedan fuera las visitas a enl
 para esos visitantes. La definición `scope` de la propia respuesta lo explica. Los tests
 (`npm test`, `npm run test:a2a`) mandan siempre un User-Agent `senuelo-*`. El User-Agent `node` no es
 regla, porque también lo usan crawlers de terceros. Una prueba manual sin esas marcas (por ejemplo,
-con `curl`) sí cuenta. No incluye hashes de IP, User-Agents, argumentos ni textos. Se calcula como mucho cada 5 minutos
-por centro de datos (Cache API) y sus peticiones no se registran. criba.cribalo.com lo lee por un
+con `curl`) sí cuenta. No incluye hashes de IP, User-Agents, argumentos ni textos. Se guarda 5 minutos
+en la caché de cada centro de datos (Cache API) y, detrás, en D1 (`kv['stats']`): así el cálculo, que recorre
+`events` entero, se hace como mucho una vez cada 5 minutos en total y no una vez por centro de datos. Sus
+peticiones no se registran. Prueba: `node scripts/stats-test.mjs`. criba.cribalo.com lo lee por un
 *service binding* para sus cifras en vivo.
 
 Nota: Cloudflare lo sirve con `max-age=14400` por el ajuste «Browser Cache TTL» de la zona; se
@@ -286,6 +308,12 @@ npm run summary
 ```
 ```bash
 node scripts/redact-test.mjs
+```
+```bash
+node scripts/stats-test.mjs
+```
+```bash
+node scripts/daily-test.mjs
 ```
 
 `npm run summary` imprime, además de las secciones de clientes, métodos, herramientas, purposes,

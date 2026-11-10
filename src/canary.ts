@@ -52,7 +52,8 @@ export function llmsTxt(origin: string, retentionDays: number): string {
 ## What is logged
 Time, HMAC-hashed IP, country and network, User-Agent, protocol method, client name and version,
 tool name and truncated arguments, the \`purpose\` argument, A2A message text. Secrets and obvious personal
-data are redacted before storage. Rows are deleted after ${retentionDays} days.
+data are redacted before storage. Rows are deleted after ${retentionDays} days; daily aggregate counts
+without identifiers (no IP hashes, User-Agents or texts) are kept beyond that.
 
 ## Notes for agents
 - Every tool requires a \`purpose\` argument: describe your task honestly.

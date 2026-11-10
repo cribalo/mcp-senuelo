@@ -194,3 +194,6 @@ fallo, sin interpretarlo.
   pasa a llamarse `workspace-…`. No cambia ninguna tarea ni medida.
 - 9 nov 2026: se añade la tanda 2 (sección propia), fijada antes de ejecutarla. La tanda 1 no cambia.
 - 9 nov 2026: se añade la tanda 3 (sección propia), fijada antes de ejecutarla. El texto de las tareas pasa a `scripts/lab-tasks.mjs` sin cambiar ni una letra.
+- 10 nov 2026: copia de `lab/` (gitignorado, única copia de transcripciones y D1 locales) con
+  `node scripts/lab-archive.mjs`: un `tar.zst` con fecha y commit, y su SHA-256, en `/root/lab-archive/`,
+  fuera del repo. Hacerla al cerrar cada tanda. No cambia ningún protocolo.
