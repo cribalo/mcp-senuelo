@@ -1,6 +1,6 @@
 // Lab runner: real Claude Code agents against a local copy of the decoy. Protocol: LABORATORIO.md.
 // Start the server first:  npx wrangler dev --port 8787 --ip 127.0.0.1 --local-upstream mcp.cribalo.com
-// Usage: node scripts/lab.mjs [--variant published|silent|ablation] [--cells …] [--models haiku,sonnet,opus] [--reps 2] [--tasks T1,T4] [--concurrency 3]
+// Usage: node scripts/lab.mjs [--variant published|silent|ablation|t6] [--cells …] [--models haiku,sonnet,opus] [--reps 2] [--tasks T1,T4] [--concurrency 3]
 //                             [--base http://127.0.0.1:8787] [--out lab/runs]
 // Transcripts (stream-json) go to <out>/<id>.jsonl; one line per run is appended to <out>/index.jsonl.
 import { spawn } from "node:child_process";
@@ -22,24 +22,33 @@ const opt = (name, dflt) => {
   return i >= 0 && args[i + 1] ? args[i + 1] : dflt;
 };
 const variant = opt("--variant", "published");
-if (!["published", "silent", "ablation"].includes(variant)) throw new Error(`unknown variant ${variant}`);
+if (!["published", "silent", "ablation", "t6"].includes(variant)) throw new Error(`unknown variant ${variant}`);
 const lab = variant !== "published"; // served by wrangler.lab.jsonc
 const models = opt("--models", "haiku,sonnet,opus").split(",");
 const reps = Number.parseInt(opt("--reps", "2"), 10);
-const taskIds = opt("--tasks", variant === "ablation" ? "T2,T4,T5" : Object.keys(TASKS).join(",")).split(",");
+const taskIds = opt("--tasks", ["ablation", "t6"].includes(variant) ? "T2,T4,T5" : Object.keys(TASKS).join(",")).split(",");
 const concurrency = Number.parseInt(opt("--concurrency", "3"), 10);
 const base = opt("--base", lab ? "http://127.0.0.1:8790" : "http://127.0.0.1:8787");
-const out = resolve(opt("--out", { published: "lab/runs", silent: "lab/runs-t2", ablation: "lab/runs-t5" }[variant]));
+const out = resolve(opt("--out", { published: "lab/runs", silent: "lab/runs-t2", ablation: "lab/runs-t5", t6: "lab/runs-t6" }[variant]));
 
-// Cells: published and silent are one fixed cell each; ablation crosses the three switches (LABORATORIO.md, tanda 5).
+// Cells: published and silent are one fixed cell each (no header). Each cell: tag (in the run id), the x-lab-cell
+// header for src/lab-variant.ts, and the server name the client sees.
+// ablation (tanda 5): notice × name × data. t6 (tanda 6): description (plain/deny) × notice, all research-mcp with
+// plausible data, plus the production server itself (LABORATORIO.md).
 const CELLS = variant === "ablation"
-  ? ["1", "0"].flatMap((notice) => ["research", "toolbox"].flatMap((name) => ["filler", "plausible"].map((data) => ({ notice, name, data }))))
-  : [null];
-const cellTag = (c) => (c ? `n${c.notice}-${c.name}-${c.data}` : null);
-// --cells n1-research-filler,n0-toolbox-plausible limits the ablation to some cells (pilot only).
+  ? ["1", "0"].flatMap((notice) => ["research", "toolbox"].flatMap((name) => ["filler", "plausible"].map((data) => ({
+      tag: `n${notice}-${name}-${data}`, header: `notice=${notice},name=${name},data=${data}`,
+      server: name === "research" ? "research-mcp" : "toolbox"
+    }))))
+  : variant === "t6"
+  ? [...["plain", "deny"].flatMap((desc) => ["0", "1"].map((notice) => ({
+      tag: `d${desc === "deny" ? 1 : 0}-n${notice}`, header: `notice=${notice},name=research,data=plausible,desc=${desc}`,
+      server: "research-mcp"
+    }))), { tag: "prod", header: "prod=1", server: "research-mcp" }]
+  : [{ tag: null, header: null, server: variant === "silent" ? "toolbox" : "research-mcp" }];
+// --cells n1-research-filler,n0-toolbox-plausible (or d1-n0,prod) limits the run to some cells (pilot only).
 const onlyCells = opt("--cells", null)?.split(",");
-if (onlyCells) for (let i = CELLS.length - 1; i >= 0; i--) if (!onlyCells.includes(cellTag(CELLS[i]))) CELLS.splice(i, 1);
-const serverName = (c) => (c ? (c.name === "research" ? "research-mcp" : "toolbox") : variant === "silent" ? "toolbox" : "research-mcp");
+if (onlyCells) for (let i = CELLS.length - 1; i >= 0; i--) if (!onlyCells.includes(CELLS[i].tag)) CELLS.splice(i, 1);
 const TIMEOUT_MS = 4 * 60 * 1000;
 
 for (const t of taskIds) if (!TASKS[t]) throw new Error(`unknown task ${t}`);
@@ -60,12 +69,12 @@ for (let rep = 1; rep <= reps; rep++)
         n++;
         // Documentation ranges (RFC 5737): one hashed IP, so one visitor and one rate-limit bucket, per run.
         const ip = n <= 254 ? `192.0.2.${n}` : n <= 508 ? `198.51.100.${n - 254}` : `203.0.113.${n - 508}`;
-        const tag = cellTag(cell);
+        const tag = cell.tag;
         jobs.push({ id: `${stamp}-${tag ? tag + "-" : ""}${task}-${model}-r${rep}`, task, model, rep, ip, cell: tag });
       }
 // Ablation: shuffled with a fixed seed, so cells are spread over the whole session (rate limits, model drift).
-if (variant === "ablation") {
-  let s = 20261110;
+if (variant === "ablation" || variant === "t6") {
+  let s = variant === "t6" ? 20261111 : 20261110;
   const rnd = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
   for (let i = jobs.length - 1; i > 0; i--) {
     const j = Math.floor(rnd() * (i + 1));
@@ -78,8 +87,9 @@ function runOne(job) {
     const key = job.task === "T4" ? "sk-proj-" + randomBytes(18).toString("base64url") : null;
     const cwd = mkdtempSync(join(tmpdir(), "workspace-"));
     const cfg = join(cwd, "..", `${job.id}.mcp.json`);
-    const SERVER = serverName(CELLS.find((c) => cellTag(c) === job.cell) ?? null);
-    const headers = { "cf-connecting-ip": job.ip, ...(job.cell ? { "x-lab-cell": job.cell.replace(/^n(\d)-(\w+)-(\w+)$/, "notice=$1,name=$2,data=$3") } : {}) };
+    const cell = CELLS.find((c) => c.tag === job.cell);
+    const SERVER = cell.server;
+    const headers = { "cf-connecting-ip": job.ip, ...(cell.header ? { "x-lab-cell": cell.header } : {}) };
     writeFileSync(cfg, JSON.stringify({ mcpServers: { [SERVER]: { type: "http", url: `${base}/mcp`, headers } } }));
     const argv = [
       "-p", TASKS[job.task](key),
