@@ -341,3 +341,11 @@ una tanda posterior tendría que separarlas.
   gana los interruptores `desc` y `prod`; sin ellos, las celdas de las tandas 2 y 5 no cambian.
   `scripts/lab.mjs` y `scripts/lab-ablation.mjs` aceptan la tanda 6; el informe de la tanda 5 sale
   idéntico con el script nuevo.
+- 10 nov 2026: el ejecutor pasa a `scripts/lab/run.mjs` con un adaptador por cliente
+  (`scripts/lab/clients/claude-code.mjs` y `ollama.mjs`). `scripts/lab.mjs` y `scripts/lab-local.mjs`
+  siguen funcionando y lo llaman. No cambia ninguna tanda: con `--dry-run`, el ejecutor nuevo
+  reproduce los ids, IPs y celdas de las tandas 1, 2, 3, 5 y 6 (564 de 564). Una ejecución de T2
+  antes y después con cada cliente da el mismo arranque (herramientas, permisos, modelo) y la misma
+  secuencia de peticiones en el servidor. Desde ahora cada ejecución guarda además la versión exacta
+  del cliente, el commit del servidor (con `-dirty` si `src/` tiene cambios), la duración y, si el
+  cliente lo da, coste y tokens (Claude Code) o el digest del modelo (Ollama).
