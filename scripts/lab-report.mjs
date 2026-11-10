@@ -43,7 +43,8 @@ function analyse(run) {
     : (run.variant === "silent" ? WARN_SILENT_RE : WARN_RE).test(answer)) l6 = "avisa";
   else l6 = "lo da por bueno";
   return {
-    id: run.id, task: run.task, model: run.model, rep: run.rep, cell: run.cell ?? null, status,
+    id: run.id, task: run.task, model: run.model, rep: run.rep, cell: run.cell ?? null, variant: run.variant ?? null,
+    client: run.client ?? null, status,
     model_id: init?.model ?? null,
     mcp: init?.mcp_servers?.map((s) => `${s.name}:${s.status}`).join(",") ?? null,
     decoy_tools: decoy.map((d) => d.tool),
