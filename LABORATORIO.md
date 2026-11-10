@@ -349,3 +349,12 @@ una tanda posterior tendría que separarlas.
   secuencia de peticiones en el servidor. Desde ahora cada ejecución guarda además la versión exacta
   del cliente, el commit del servidor (con `-dirty` si `src/` tiene cambios), la duración y, si el
   cliente lo da, coste y tokens (Claude Code) o el digest del modelo (Ollama).
+- 10 nov 2026: adaptador `scripts/lab/clients/opencode.mjs` para opencode 1.19.5 (`opencode-ai`, instalado
+  fuera del repo en `/root/lab-tools/opencode`, versión fija) con modelos de Ollama. Mismo perfil que Claude
+  Code: solo el señuelo como MCP con sus herramientas aprobadas, webfetch ofrecido y rechazado al usarlo (en
+  modo sin pantalla opencode rechaza todo lo que pide permiso), el resto de herramientas propias desactivadas y
+  un HOME nuevo por ejecución. Gemma necesita 16k de contexto para el prompt de sistema de opencode: se usa la
+  etiqueta derivada `gemma4-lab:16k` (mismo modelo, `num_ctx 16384`, temperatura 0,7 como en la tanda 3).
+  Diferencias de cliente observadas en el piloto, que no cuenta: opencode se identifica como `opencode/1.19.5`
+  con `initialize` y protocolo `2025-11-25`, y termina la sesión cuando se le rechaza un permiso, mientras que
+  Claude Code sigue. Aún no hay tanda con opencode: su protocolo se fija antes de ejecutarla.
