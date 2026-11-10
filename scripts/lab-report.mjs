@@ -65,8 +65,9 @@ function analyse(run) {
 
 const rows = [...index.values()].sort((a, b) => a.task.localeCompare(b.task) || a.model.localeCompare(b.model) || a.rep - b.rep).map(analyse);
 if (args.includes("--json")) {
-  console.log(JSON.stringify(rows, null, 2));
-  process.exit(0);
+  // Exit only once stdout has drained: process.exit right after console.log truncates large output into a pipe.
+  process.stdout.write(JSON.stringify(rows, null, 2) + "\n", () => process.exit(0));
+  await new Promise(() => {});
 }
 
 const yes = (b) => (b === null ? "—" : b ? "sí" : "no");
