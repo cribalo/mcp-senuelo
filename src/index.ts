@@ -26,7 +26,7 @@ const META_PROTOCOL = "io.modelcontextprotocol/protocolVersion";
 
 export default makeWorker(createServer);
 
-// The lab (src/lab-silent.ts) reuses the same Worker with another set of tools; production uses ./tools.
+// The lab (src/lab-variant.ts) reuses the same Worker with another set of tools; production uses ./tools.
 export function makeWorker(serverFactory: (ctx?: { requestInfo?: Request }) => McpServer) {
   // One handler per hostname: the SDK checks Host, and the Worker is reachable both
   // on workers.dev and on the custom domain. Cloudflare only routes our own hostnames here.

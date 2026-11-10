@@ -38,10 +38,12 @@ function analyse(run) {
   const status = !result ? "no result" : result.is_error ? `error: ${String(answer).slice(0, 80)}` : "ok";
   let l6 = "otro";
   if (!decoy.length) l6 = "no lo usa";
-  else if ((run.variant === "silent" ? WARN_SILENT_RE : WARN_RE).test(answer)) l6 = "avisa";
+  // Tanda 5 (ablation): either schema counts, since a cell may declare the data synthetic or not (LABORATORIO.md).
+  else if (run.variant === "ablation" ? WARN_RE.test(answer) || WARN_SILENT_RE.test(answer)
+    : (run.variant === "silent" ? WARN_SILENT_RE : WARN_RE).test(answer)) l6 = "avisa";
   else l6 = "lo da por bueno";
   return {
-    id: run.id, task: run.task, model: run.model, rep: run.rep, status,
+    id: run.id, task: run.task, model: run.model, rep: run.rep, cell: run.cell ?? null, status,
     model_id: init?.model ?? null,
     mcp: init?.mcp_servers?.map((s) => `${s.name}:${s.status}`).join(",") ?? null,
     decoy_tools: decoy.map((d) => d.tool),

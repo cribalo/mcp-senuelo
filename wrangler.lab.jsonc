@@ -1,11 +1,12 @@
-// LAB ONLY (LABORATORIO.md, tanda 2): the decoy without its notice. Never deploy this config.
-// It has no account, routes or workers.dev, and src/lab-silent.ts only answers documentation-range IPs.
+// LAB ONLY (LABORATORIO.md, tandas 2 and 5): the decoy with switchable notice, name and data. Never deploy this config.
+// It has no account, routes or workers.dev, and src/lab-variant.ts only answers documentation-range IPs.
+// The vars below are the tanda 2 variant; tanda 5 picks a cell per run with the x-lab-cell header.
 // npx wrangler d1 migrations apply mcp-senuelo-lab --local -c wrangler.lab.jsonc --persist-to lab/state-silent
 // npx wrangler dev -c wrangler.lab.jsonc --port 8790 --ip 127.0.0.1 --local-upstream mcp.cribalo.com --persist-to lab/state-silent
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mcp-senuelo-lab",
-  "main": "src/lab-silent.ts",
+  "main": "src/lab-variant.ts",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": false },
@@ -21,6 +22,9 @@
     "RETENTION_DAYS": "90",
     "MAX_BODY_BYTES": "32768",
     "MAX_FIELD_CHARS": "2000",
-    "CONTACT": "contact@cribalo.com"
+    "CONTACT": "contact@cribalo.com",
+    "LAB_NOTICE": "0",
+    "LAB_NAME": "toolbox",
+    "LAB_DATA": "plausible"
   }
 }
