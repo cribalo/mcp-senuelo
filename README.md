@@ -447,7 +447,8 @@ node scripts/summary.mjs --remote --days 7
 ```
 Opciones: `--days`, `--limit`.
 
-Darlo de alta en directorios públicos de MCP es otro paso, que hará falta confirmar.
+Las altas en directorios públicos de MCP se anotan en `LISTADO.md` (el registro oficial, desde el
+8 nov 2026). Cada alta nueva, con la confirmación del titular.
 
 ## RGPD
 
@@ -487,4 +488,4 @@ Darlo de alta en directorios públicos de MCP es otro paso, que hará falta conf
 ## Pendiente
 
 - Revisar la retención (90 días) y el límite de peticiones (30/60 s) cuando haya datos.
-- Alta en directorios públicos de MCP, con la confirmación del titular.
+- Alta en el resto de directorios públicos de MCP (ver `LISTADO.md`), con la confirmación del titular.

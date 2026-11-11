@@ -1,9 +1,9 @@
-# Texto para los directorios de MCP (borrador, sin publicar)
+# Texto para los directorios de MCP (en uso: registro oficial desde el 8 nov 2026)
 
 Pensado para cumplir los términos del registro oficial (consultados el 8 nov 2026): nada que parezca
 malicioso, ninguna afiliación falsa, un solo nombre, y que nadie lo tome por un servidor funcional
-(su política de moderación retira los «no funcionales»). Se publica solo con la confirmación del
-titular.
+(su política de moderación retira los «no funcionales»). Cada alta nueva se hace solo con la
+confirmación del titular.
 
 - **Nombre:** `cribalo-research-mcp` (el mismo de `McpServer` en `src/tools.ts`).
 - **Título:** MCP Research Probe (synthetic tools)

@@ -1,6 +1,6 @@
 {
   "name": "mcp-senuelo",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Research MCP honeypot on Cloudflare Workers",
   "scripts": {
     "test": "node scripts/test-client.mjs",
