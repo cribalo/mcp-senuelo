@@ -18,6 +18,7 @@ y `mcp-publisher publish`. Si se borra el TXT, no se puede volver a publicar has
 
 ```
 cliente MCP ──HTTPS──▶ Worker (mcp.cribalo.com)
+                        ├─ HTTP en claro → 301 a HTTPS (308 si no es GET/HEAD); no se registra
                         ├─ límite: 30 peticiones/60 s por IP con hash (binding ratelimits) → 429
                         ├─ cuerpo > 32 KiB → 413 (se registra como 'rejected')
                         ├─ /mcp  → createMcpHandler (agents) + McpServer (SDK v2), sin estado
@@ -51,6 +52,13 @@ cron diario 03:17 UTC ──▶ DELETE de filas con más de RETENTION_DAYS
   «Synthetic response… Nothing was executed». Cada una exige `purpose` (de 1 a 500 caracteres),
   y su descripción dice que las llamadas se registran. Las respuestas no llevan instrucciones
   para el agente.
+- **HTTPS (11 nov 2026):** el Worker sabe que la petición llegó en claro por `cf-visitor` o
+  `x-forwarded-proto`. `wrangler dev` no manda ninguna de las dos (y reescribe la URL a
+  `http://mcp.cribalo.com`), así que las pruebas y el laboratorio no se redirigen. Las páginas HTML
+  (`/`, `/c/…` y `/dash/`) llevan `Strict-Transport-Security: max-age=31536000`, sin subdominios ni
+  *preload*. Los ficheros de `public/` (el panel) los sirve Cloudflare antes del Worker y no se
+  redirigen: eso lo cubre el ajuste de zona «Always Use HTTPS». La portada lleva además una CSP
+  que solo admite su `<style>` por hash, `nosniff` y `Referrer-Policy: no-referrer`.
 - **Origin:** el SDK rechaza (403) las peticiones de navegador desde otros dominios, para que
   ninguna web pueda usar el navegador de sus visitantes contra `/mcp`.
 

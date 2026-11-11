@@ -1,3 +1,26 @@
+// HSTS on HTML pages: one year, no includeSubDomains and no preload until the whole zone is ready for it.
+export const HSTS = "max-age=31536000";
+
+// The only inline content of the page; the CSP allows it by hash (homeHeaders) and nothing else.
+const STYLE = `
+  body { font: 16px/1.55 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; color: #1d1d1f; background: #fff; }
+  code { background: #f2f2f2; padding: .1em .3em; border-radius: 3px; }
+  h2 { margin-top: 2rem; }
+  @media (prefers-color-scheme: dark) { body { color: #eee; background: #161616; } code { background: #2a2a2a; } a { color: #8ab4f8; } }
+`;
+
+let csp: Promise<string> | undefined;
+export async function homeHeaders(): Promise<Record<string, string>> {
+  csp ??= crypto.subtle.digest("SHA-256", new TextEncoder().encode(STYLE)).then((d) => {
+    const hash = btoa(String.fromCharCode(...new Uint8Array(d)));
+    return `default-src 'none'; style-src 'sha256-${hash}'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'`;
+  });
+  return {
+    "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "content-security-policy": await csp,
+    "x-content-type-options": "nosniff", "referrer-policy": "no-referrer", "strict-transport-security": HSTS
+  };
+}
+
 export function renderHome(contact: string, retentionDays: number): string {
   const mail = contact ? escapeHtml(contact) : "";
   const contactLine = mail ? `<p>Contact: <a href="mailto:${mail}">${mail}</a></p>` : "";
@@ -14,12 +37,7 @@ export function renderHome(contact: string, retentionDays: number): string {
 <meta property="og:title" content="Open MCP and A2A research honeypot">
 <meta property="og:description" content="Which AI agents connect to an open MCP server, and what do they say they want? A declared research decoy with fake tools.">
 <meta name="twitter:card" content="summary">
-<style>
-  body { font: 16px/1.55 system-ui, sans-serif; max-width: 46rem; margin: 2rem auto; padding: 0 1rem; color: #1d1d1f; background: #fff; }
-  code { background: #f2f2f2; padding: .1em .3em; border-radius: 3px; }
-  h2 { margin-top: 2rem; }
-  @media (prefers-color-scheme: dark) { body { color: #eee; background: #161616; } code { background: #2a2a2a; } a { color: #8ab4f8; } }
-</style>
+<style>${STYLE}</style>
 </head>
 <body>
 <h1>Research MCP server</h1>

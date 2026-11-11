@@ -4,6 +4,7 @@ import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/cli
 import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 
 const base = process.argv.find((a) => a.startsWith("http")) ?? "http://127.0.0.1:8787";
 const testRateLimit = process.argv.includes("--rate-limit");
@@ -45,7 +46,24 @@ await check("GET / explains the server", async () => {
   assert.match(html, /never shared or sold/);
   assert.doesNotMatch(html, /noindex/, "the home page must be indexable");
   assert.match(html, /<meta name="description"/);
+  // Security headers: the CSP admits the page's only <style> by its hash, nothing else.
+  const style = /<style>([\s\S]*?)<\/style>/.exec(html)[1];
+  const hash = createHash("sha256").update(style).digest("base64");
+  assert.ok((res.headers.get("content-security-policy") ?? "").startsWith(`default-src 'none'; style-src 'sha256-${hash}';`));
+  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(res.headers.get("referrer-policy"), "no-referrer");
+  assert.equal(res.headers.get("strict-transport-security"), "max-age=31536000");
 });
+
+if (d1Where === "--local") {
+  await check("plain HTTP to the public host redirects to HTTPS (cf-visitor); wrangler dev itself is not redirected", async () => {
+    const viaHttp = { redirect: "manual", headers: { "cf-visitor": '{"scheme":"http"}' } };
+    assert.equal((await fetch(base + "/", viaHttp)).status, 301);
+    const post = await fetch(base + "/mcp", { ...viaHttp, method: "POST", body: "{}" });
+    assert.equal(post.status, 308);
+    assert.equal((await fetch(base + "/robots.txt", { redirect: "manual", ...OWN_BUCKET })).status, 200);
+  });
+}
 
 await check("unknown path is 404 and logged", async () => {
   const res = await fetch(base + "/wp-login.php?user=x");

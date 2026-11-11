@@ -1,7 +1,7 @@
 import { createMcpHandler } from "agents/mcp/server";
 import { createServer } from "./tools";
 import type { McpServer } from "@modelcontextprotocol/server";
-import { renderHome } from "./page";
+import { homeHeaders, renderHome } from "./page";
 import { handleDash } from "./dash";
 import { handleStats } from "./stats";
 import { aggregateDaily, nextDay } from "./daily";
@@ -48,6 +48,12 @@ export function makeWorker(serverFactory: (ctx?: { requestInfo?: Request }) => M
   return {
   async fetch(request, env, ctx): Promise<Response> {
     const url = new URL(request.url);
+    // Plain HTTP on the public hostname goes to HTTPS before anything else, so it is neither rate-limited nor
+    // logged (as with the zone setting "Always Use HTTPS"). 308 keeps the method and body of an MCP POST.
+    if (url.hostname === env.PUBLIC_HOSTNAME && plainHttp(request)) {
+      url.protocol = "https:";
+      return Response.redirect(url.href, request.method === "GET" || request.method === "HEAD" ? 301 : 308);
+    }
     const maxBody = Number(env.MAX_BODY_BYTES) || 32768;
     const maxField = Number(env.MAX_FIELD_CHARS) || 2000;
     const ipHash = await hashIp(request.headers.get("cf-connecting-ip") ?? "unknown", env.IP_SALT);
@@ -120,9 +126,7 @@ export function makeWorker(serverFactory: (ctx?: { requestInfo?: Request }) => M
       return response;
     }
     if (url.pathname === "/" && (request.method === "GET" || request.method === "HEAD")) {
-      response = new Response(renderHome(env.CONTACT, Number(env.RETENTION_DAYS) || 90), {
-        headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" }
-      });
+      response = new Response(renderHome(env.CONTACT, Number(env.RETENTION_DAYS) || 90), { headers: await homeHeaders() });
     } else if (url.pathname === "/robots.txt") {
       response = new Response(`User-agent: *\nAllow: /\n\nSitemap: ${origin}/sitemap.xml\n`, { headers: { "content-type": "text/plain" } });
     } else if (url.pathname === "/sitemap.xml") {
@@ -172,6 +176,12 @@ export function makeWorker(serverFactory: (ctx?: { requestInfo?: Request }) => M
     await env.DB.prepare("DELETE FROM events WHERE ts < ?").bind(retention < aggregated ? retention : aggregated).run();
   }
   } satisfies ExportedHandler<Env>;
+}
+
+// Cloudflare says how the visitor connected (cf-visitor, x-forwarded-proto). `wrangler dev` sends neither and
+// rewrites the URL to http://<PUBLIC_HOSTNAME>, so local runs (tests, the lab) are never redirected.
+function plainHttp(request: Request): boolean {
+  return /"scheme"\s*:\s*"http"/.test(request.headers.get("cf-visitor") ?? "") || request.headers.get("x-forwarded-proto") === "http";
 }
 
 function baseRow(request: Request, url: URL, ipHash: string): Row {

@@ -3,6 +3,7 @@
 // a later visit to the link is logged with note `canary-hit`. A visit means someone (an agent,
 // a fetcher, a human) acted on the result instead of only receiving it.
 // The links are labelled as logged reference pages; they carry no instructions.
+import { HSTS } from "./page";
 
 export const CANARY_HEADER = "x-senuelo-canary";
 const TOKEN_RE = /^[a-z2-7]{12}$/;
@@ -32,7 +33,7 @@ export function canaryPage(): Response {
 <a href="/">mcp.cribalo.com</a>). There is no real data here. Visits to this page are logged
 (time, hashed IP, User-Agent) to study whether agents act on tool results.</p></body></html>`;
   return new Response(html, {
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex" }
+    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex", "strict-transport-security": HSTS }
   });
 }
 
