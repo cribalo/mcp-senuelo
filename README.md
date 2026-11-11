@@ -386,7 +386,7 @@ cd /opt/mcp-senuelo && npm run indexnow
 La página de `/` está en inglés desde el 9 nov 2026, con un resumen de privacidad en español.
 
 **Desplegado el 8 nov 2026** en `https://mcp.cribalo.com`, en la cuenta de Cloudflare
-«Femogo@gmail.com's Account» (`de3e30eb…`). Esa cuenta también tiene la zona `cribalo.com`, y
+del titular (`de3e30eb…`). Esa cuenta también tiene la zona `cribalo.com`, y
 `wrangler.jsonc` la fija con `account_id`. workers.dev está desactivado: el único acceso es el
 dominio. `contact@cribalo.com` se reenvía con Email Routing.
 

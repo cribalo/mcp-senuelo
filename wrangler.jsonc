@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "mcp-senuelo",
   "main": "src/index.ts",
-  // Must be the account that holds the cribalo.com zone ("Femogo@gmail.com's Account").
+  // Must be the account that holds the cribalo.com zone.
   "account_id": "de3e30eb20055289c56d92ef70aecdc9",
   "compatibility_date": "2026-10-01",
   "compatibility_flags": ["nodejs_compat"],
