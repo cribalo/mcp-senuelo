@@ -369,11 +369,12 @@ Resultado el 8 nov 2026: 21 de 21 pruebas pasan en local, y la purga del cron, p
 
 ## Desplegar
 
-Desde el 9 nov 2026 el token de Cloudflare está en `.env` (permisos 600, en `.gitignore`), no en
-`~/.bashrc`. El despliegue lo lanza el titular:
+Desde el 12 nov 2026 el token de Cloudflare está en `/opt/cribalo/.env` (permisos 600, fuera de
+cualquier repositorio). Es la única copia, y la usan también criba y el hub. El despliegue lo
+lanza el titular:
 
 ```bash
-cd /opt/mcp-senuelo && (set -a && . .env && set +a && npx wrangler deploy)
+cd /opt/mcp-senuelo && (set -a && . /opt/cribalo/.env && set +a && npx wrangler deploy)
 ```
 
 Si cambia la portada, después avisar a los buscadores de IndexNow (Bing, Yandex…), que solo reciben
@@ -397,9 +398,13 @@ Lo que aprendimos al desplegar:
   account`.
 - **`wrangler login` no funciona en el LXC**, porque espera la respuesta en `localhost:8976`.
   Usa un token de API exportado como `CLOUDFLARE_API_TOKEN`, con estos permisos:
-  - **Cuenta** (la de la zona): las tres casillas **Edit** de Workers, sin **Admin**, y **D1 → Edit**.
-  - **Zona** `cribalo.com`: **Zone → Read** y **DNS → Edit**. Sin *Zone Read*, wrangler no ve la
-    zona.
+  (los del token `d1_dashboard_cribalo`, mirados en el panel el 12 nov 2026):
+  - **Cuenta** (la de la zona): **Edit** en Workers Scripts, Workers KV Storage, Workers R2
+    Storage, Cloudflare Pages, Containers, Workers Agents Configuration, Workers Builds
+    Configuration y Workers Observability; **Read** en Workers Tail y Account Settings; y
+    **D1 → Edit**.
+  - **Zona** `cribalo.com`: solo **Workers Routes → Edit**. No tiene permiso de DNS ni de
+    reglas, así que no puede tocar los TXT ni el MX de la raíz.
 
   Revoca el token al terminar y bórralo del historial
   (`sed -i '/CLOUDFLARE_API_TOKEN/d' ~/.bash_history`).
