@@ -490,6 +490,11 @@ Las altas en directorios públicos de MCP se anotan en `LISTADO.md` (el registro
 - **Registro de actividades (art. 30) y EIPD:** conviene una entrada breve en el registro. Con
   datos mínimos y seudonimizados no parece hacer falta una EIPD, pero esa decisión es del titular.
 
+## Licencia
+
+El código está bajo licencia MIT (`LICENSE`). Los datos que recoge el señuelo no forman parte del
+repositorio y no se publican salvo en cifras agregadas.
+
 ## Pendiente
 
 - Revisar la retención (90 días) y el límite de peticiones (30/60 s) cuando haya datos.
